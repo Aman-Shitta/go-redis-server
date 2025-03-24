@@ -21,7 +21,10 @@ func main() {
 		fmt.Println("Failed to bind to port 6379")
 		os.Exit(1)
 	}
+	var conns []net.Conn
+
 	for {
+		fmt.Println("[+] New COnnection [+]")
 		conn, err := l.Accept()
 		if err != nil {
 			fmt.Println("Error accepting connection: ", err.Error())
@@ -29,15 +32,31 @@ func main() {
 		}
 
 		fmt.Println("Conntected : ", l.Addr().String())
+		conns = append(conns, conn)
 
-		var input []byte
+		go hanldeRequests(conn)
+		// var input []byte
 
-		if _, err := conn.Read(input); err != nil {
-			fmt.Println("Error reading from connection: ", err.Error())
-			os.Exit(1)
+		// if _, err := conn.Read(input); err != nil {
+		// 	fmt.Println("Error reading from connection: ", err.Error())
+		// 	os.Exit(1)
+		// }
+		// conn.Write([]byte("+PONG\r\n"))
+
+		// conn.Close()
+	}
+}
+
+func hanldeRequests(c net.Conn) {
+	var data = make([]byte, 1024)
+	for {
+		_, err := c.Read(data)
+		if err != nil {
+			fmt.Println("Error handling requests : ", err.Error())
+			c.Close()
+			return
 		}
-		conn.Write([]byte("+PONG\r\n"))
-
-		conn.Close()
+		c.Write([]byte("+PONG\r\n"))
+		fmt.Println("[+] READ something [+]")
 	}
 }
