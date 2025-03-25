@@ -6,10 +6,6 @@ import (
 	"os"
 )
 
-// Ensures gofmt doesn't remove the "net" and "os" imports in stage 1 (feel free to remove this!)
-var _ = net.Listen
-var _ = os.Exit
-
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")
@@ -21,20 +17,19 @@ func main() {
 		fmt.Println("Failed to bind to port 6379")
 		os.Exit(1)
 	}
-	var conns []net.Conn
+	// var conns []net.Conn
 
 	for {
-		fmt.Println("[+] New COnnection [+]")
 		conn, err := l.Accept()
 		if err != nil {
 			fmt.Println("Error accepting connection: ", err.Error())
 			os.Exit(1)
 		}
-
+		fmt.Println("[+] New Connection [+]")
 		fmt.Println("Conntected : ", l.Addr().String())
-		conns = append(conns, conn)
+		// conns = append(conns, conn)
 
-		go hanldeRequests(conn)
+		go hanldeConnRequests(conn)
 		// var input []byte
 
 		// if _, err := conn.Read(input); err != nil {
@@ -47,16 +42,38 @@ func main() {
 	}
 }
 
-func hanldeRequests(c net.Conn) {
-	var data = make([]byte, 1024)
+func hanldeConnRequests(c net.Conn) {
+	defer c.Close()
 	for {
+		var data = make([]byte, 1024)
 		_, err := c.Read(data)
+		fmt.Println("connection data : ", string(data))
 		if err != nil {
 			fmt.Println("Error handling requests : ", err.Error())
-			c.Close()
 			return
 		}
-		c.Write([]byte("+PONG\r\n"))
-		fmt.Println("[+] READ something [+]")
+
+		command, args, err := parseResp(data)
+		fmt.Println("command, args :: ", command, args)
+		if err != nil {
+			c.Write([]byte(fmt.Sprintf("-ERR %s\r\n", err.Error())))
+			continue
+		}
+
+		fn, err := processCommand(command)
+
+		if err != nil {
+			c.Write([]byte(fmt.Sprintf("-ERR %s\r\n", err.Error())))
+			continue
+		}
+
+		err = fn(c, args)
+
+		if err != nil {
+			c.Write([]byte(fmt.Sprintf("-ERR %s\r\n", err.Error())))
+			continue
+		}
+		// c.Write([]byte("+PONG\r\n"))
+		// fmt.Println("[+] READ something [+]")
 	}
 }
