@@ -29,11 +29,21 @@ func processCommand(c string) (func(net.Conn, []string) error, error) {
 }
 
 func config(c net.Conn, args []string) error {
+	if len(args) != 2 || strings.ToLower(args[0]) != "get" {
+		return fmt.Errorf("ERR not yet supported")
+	}
 
-	dir := PERSISTENT_CONFIG["dir"]
-	dbFileName := PERSISTENT_CONFIG["dbFileName"]
+	var resp string
 
-	resp := fmt.Sprintf("*2\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n", len(dir), dir, len(dbFileName), dbFileName)
+	switch strings.ToLower(args[1]) {
+	case "dir":
+		dir := PERSISTENT_CONFIG["dir"]
+		resp = fmt.Sprintf("*2\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n", len("dir"), "dir", len(dir), dir)
+	case "dbfilename":
+		dbFileName := PERSISTENT_CONFIG["dbFileName"]
+		resp = fmt.Sprintf("*2\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n", len("dbFileName"), "dbFileName", len(dbFileName), dbFileName)
+	}
+
 	_, err := c.Write([]byte(resp))
 
 	return err
