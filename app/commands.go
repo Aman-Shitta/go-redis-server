@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 func processCommand(c string) (func(net.Conn, []string) error, error) {
@@ -53,8 +55,8 @@ var sessionData = &Map{
 
 func set(c net.Conn, args []string) error {
 
-	if len(args) != 2 {
-		return fmt.Errorf("ERR syntax error")
+	if len(args) < 2 {
+		return fmt.Errorf("syntax error")
 	}
 	key := args[0]
 	value := args[1]
@@ -62,6 +64,33 @@ func set(c net.Conn, args []string) error {
 	sessionData.Lock()
 	defer sessionData.Unlock()
 	sessionData.Data[key] = value
+
+	// Handle PX (expiry in milliseconds)
+	if len(args) > 2 {
+		if len(args) != 4 || strings.ToLower(args[2]) != "px" {
+			return fmt.Errorf("syntax error")
+		}
+
+		expiry, err := strconv.Atoi(args[3])
+		fmt.Println("expiry :: ", expiry)
+		if err != nil || expiry < 0 {
+			return fmt.Errorf("invalid PX value")
+		}
+
+		// Launch expiration goroutine
+		go func(key string, exp int) {
+
+			time.Sleep(time.Duration(exp) * time.Millisecond)
+			sessionData.Lock()
+			delete(sessionData.Data, key)
+
+			// Only delete if the key is still the same value
+			if v, exists := sessionData.Data[key]; exists && v == value {
+				delete(sessionData.Data, key)
+			}
+			sessionData.Unlock()
+		}(key, expiry)
+	}
 
 	c.Write([]byte("+OK\r\n"))
 
