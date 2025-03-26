@@ -20,10 +20,23 @@ func processCommand(c string) (func(net.Conn, []string) error, error) {
 		return set, nil
 	case "get":
 		return get, nil
+	case "config":
+		return config, nil
 	default:
 		fmt.Println("Default case triggered :: ", c)
 		return nil, fmt.Errorf("not yet implemented")
 	}
+}
+
+func config(c net.Conn, args []string) error {
+
+	dir := PERSISTENT_CONFIG["dir"]
+	dbFileName := PERSISTENT_CONFIG["dbFileName"]
+
+	resp := fmt.Sprintf("*2\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n", len(dir), dir, len(dbFileName), dbFileName)
+	_, err := c.Write([]byte(resp))
+
+	return err
 }
 
 func ping(c net.Conn, args []string) error {

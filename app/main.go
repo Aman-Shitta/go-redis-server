@@ -1,10 +1,13 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"net"
 	"os"
 )
+
+var PERSISTENT_CONFIG = map[string]string{}
 
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -17,8 +20,22 @@ func main() {
 		fmt.Println("Failed to bind to port 6379")
 		os.Exit(1)
 	}
-	// var conns []net.Conn
 
+	// Define command-line flags
+	dir := flag.String("dir", "", "Directory to store RDB file")
+	dbFileName := flag.String("dbfilename", "dump.rdb", "RDB file name")
+
+	// Parse the command-line flags
+	flag.Parse()
+
+	// Store parsed values in the config map
+	PERSISTENT_CONFIG["dir"] = *dir
+	PERSISTENT_CONFIG["dbFileName"] = *dbFileName
+
+	// Print to verify
+	fmt.Println("Config:", PERSISTENT_CONFIG)
+
+	fmt.Println(PERSISTENT_CONFIG)
 	for {
 		conn, err := l.Accept()
 		if err != nil {
@@ -43,7 +60,11 @@ func main() {
 }
 
 func hanldeConnRequests(c net.Conn) {
-	defer c.Close()
+	defer func(c net.Conn) {
+		c.Close()
+		fmt.Println("[-]Connection Closed [-]")
+	}(c)
+
 	for {
 		var data = make([]byte, 1024)
 		_, err := c.Read(data)
