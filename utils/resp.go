@@ -1,6 +1,6 @@
 // Read and parse the redis-cli input
 
-package main
+package utils
 
 import (
 	"fmt"
@@ -22,7 +22,7 @@ const (
 
 func parseRESPArray(input string) ([]string, error) {
 	lines := strings.Split(input, "\r\n")
-	if len(lines) < 1 || len(lines[0]) == 0 || lines[0][0] != '*' {
+	if len(lines) < 1 || len(lines[0]) == 0 || lines[0][0] != Array {
 		return nil, fmt.Errorf("invalid RESP format")
 	}
 
@@ -64,7 +64,7 @@ func parseRESPArray(input string) ([]string, error) {
 	return result, nil
 }
 
-func parseResp(d []byte) (string, []string, error) {
+func ParseResp(d []byte) (string, []string, error) {
 	input := string(d)
 
 	if len(input) == 0 {
@@ -92,4 +92,45 @@ func parseResp(d []byte) (string, []string, error) {
 	args := arr[1:] // Properly extract args
 
 	return command, args, nil
+}
+
+var Types = map[string]string{
+	"OK":  "+",
+	"ERR": "-",
+}
+
+// generate redis RESP supported simple string where
+// second argument denotes OK > `+`, ERR `-`.
+//
+// e.g utils.ToSimpleString("Hi there", "OK") -> +OK\r\n
+func ToSimpleString(msg string, t string) string {
+
+	if respType, ok := Types[strings.ToUpper(t)]; ok {
+		return fmt.Sprintf("%s%s\r\n", respType, msg)
+	}
+	fmt.Println(RED, "Simple string conversion failed :: ", msg, t, RED)
+
+	return ""
+}
+
+func ToBulkString(data ...string) string {
+	var resp strings.Builder
+
+	// resp.WriteString(fmt.Sprintf("*%d\r\n", len(data)))
+	for _, item := range data {
+		resp.WriteString(fmt.Sprintf("$%d\r\n%s\r\n", len(item), item))
+	}
+
+	return resp.String()
+}
+
+func ToArrayBulkString(data ...string) string {
+	var resp strings.Builder
+
+	resp.WriteString(fmt.Sprintf("*%d\r\n", len(data)))
+	for _, item := range data {
+		resp.WriteString(fmt.Sprintf("$%d\r\n%s\r\n", len(item), item))
+	}
+
+	return resp.String()
 }
