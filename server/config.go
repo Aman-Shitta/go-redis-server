@@ -63,7 +63,7 @@ func (c *Config) AutoLoad() error {
 	if err != nil {
 		return err
 	}
-
+	fmt.Println("Data :: ", data)
 	ParseRDB(data)
 
 	return nil
