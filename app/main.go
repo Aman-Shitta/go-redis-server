@@ -31,6 +31,7 @@ func main() {
 
 	// Load the persistent data from file.
 	redisServer.Cnf.AutoLoad()
+	// os.Exit(-1)
 
 	// start the redis server
 	l, err := redisServer.Start(PORT)

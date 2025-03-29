@@ -137,16 +137,24 @@ func (r *RedisServer) get(c net.Conn, args []string) error {
 
 func (r *RedisServer) keys(c net.Conn, args []string) error {
 
-	if len(args) == 0 || args[0] != "*" {
+	if len(args) == 0 {
 		return fmt.Errorf("ERR not yet supported")
 	}
 
-	keys := make([]string, 0, len(SessionStore.Data))
+	allKeys := make([]string, 0, len(SessionStore.Data))
 	for k := range SessionStore.Data {
-		keys = append(keys, k)
+		allKeys = append(allKeys, k)
 	}
-
-	resp := utils.ToArrayBulkString(keys...)
+	var resp string
+	if args[0] == "*" {
+		resp = utils.ToArrayBulkString(allKeys...)
+	} else {
+		filteredKeys, err := utils.MatchPatternKeys(allKeys, args[0])
+		if err != nil {
+			return err
+		}
+		resp = utils.ToArrayBulkString(filteredKeys...)
+	}
 
 	_, err := c.Write([]byte(resp))
 	return err

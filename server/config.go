@@ -1,6 +1,26 @@
 package server
 
-import "sync"
+import (
+	"fmt"
+	"os"
+	"sync"
+)
+
+// RDB_OP_CODES
+const (
+	// End of the RDB file
+	EOF = 0xFF
+	// Database Selector
+	SELECTDB = 0xFE
+	// Expire time in seconds, see Key Expiry Timestamp
+	EXPIRETIME = 0xFD
+	// Expire time in milliseconds, see Key Expiry Timestamp
+	EXPIRETIMEMS = 0xFC
+	// Hash table sizes for the main keyspace and expires, see Resizedb information
+	RESIZEDB = 0xFB
+	// Auxiliary fields. Arbitrary key-value settings, see Auxiliary fields
+	AUX = 0xFA
+)
 
 type Config struct {
 	Dir        string
@@ -36,5 +56,30 @@ var SessionStore = &Store{
 // adding persistence
 func (c *Config) AutoLoad() error {
 
+	dump_file := fmt.Sprintf("%s/%s", c.Dir, c.Dbfilename)
+
+	data, err := os.ReadFile(dump_file)
+
+	if err != nil {
+		return err
+	}
+
+	ParseRDB(data)
+
 	return nil
 }
+
+// func readTillAux(data []byte) ([]byte, []byte) {
+
+// 	var before, after []byte
+
+// 	for idx := range len(data) {
+// 		if data[idx] == AUX {
+// 			after = data[idx+1:]
+// 			break
+// 		} else {
+// 			before = append(before, data[idx])
+// 		}
+// 	}
+// 	return before, after
+// }
