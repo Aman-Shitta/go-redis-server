@@ -25,6 +25,8 @@ func main() {
 	dir := flag.String("dir", "redis", "Directory to store RDB file")
 	dbFileName := flag.String("dbfilename", "dump.rdb", "RDB file name")
 
+	port := flag.Uint("port", PORT, "Port number")
+
 	// Parse the command-line flags
 	flag.Parse()
 
@@ -44,7 +46,7 @@ func main() {
 	}()
 
 	// start the redis server
-	l, err := redisServer.Start(PORT)
+	l, err := redisServer.Start(*port)
 
 	if err != nil {
 		utils.LogEntry("RED", "Failed to start redis server : ", err.Error())
