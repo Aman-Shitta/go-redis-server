@@ -96,18 +96,16 @@ func bytesToTimestamp(b []byte) time.Time {
 }
 
 func processByteToMap(bytes *[]byte, mapData *map[string]string) {
+	var exp time.Time
 
 	for {
 
 		b := ReadByte(bytes)
-
-		fmt.Println("read byte : ", b)
 		if b == EOF || b == SELECTDB {
 			utils.LogEntry("pink", "[+] rdb ended [+]")
 			return
 		}
 
-		var exp time.Time
 		if b == EXPIRETIMEMS {
 			// read next 8 bytes timestamp
 			var tsb []byte
@@ -115,6 +113,7 @@ func processByteToMap(bytes *[]byte, mapData *map[string]string) {
 				tsb = append(tsb, ReadByte(bytes))
 			}
 			exp = bytesToTimestamp(tsb)
+			continue
 		}
 
 		if b == 0x00 {
@@ -125,6 +124,8 @@ func processByteToMap(bytes *[]byte, mapData *map[string]string) {
 			if !exp.IsZero() {
 				ExpKeys[k] = exp
 			}
+			// reset to zero time
+			exp = time.Time{}
 		}
 	}
 }
@@ -139,14 +140,11 @@ func readKeyValue(data *[]byte) (string, string) {
 	var key, value string
 
 	key_size := ReadByte(data)
-	fmt.Println("key_size :: ", key_size)
 	for range int(key_size) {
 		key += string(ReadByte(data))
 	}
-	fmt.Println("key : ", key)
 
 	value_size := ReadByte(data)
-	fmt.Println("value_size :: ", value_size)
 	for range int(value_size) {
 		value += string(ReadByte(data))
 	}
