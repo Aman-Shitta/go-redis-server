@@ -86,13 +86,13 @@ func bytesToTimestamp(b []byte) time.Time {
 		return time.Time{}
 	}
 
-	// Convert bytes to uint64 using LittleEndian
+	// Read little-endian 8-byte integer
 	expiryMs := binary.LittleEndian.Uint64(b)
 
-	// Convert milliseconds to time.Time
-	expiryTime := time.UnixMilli(int64(expiryMs))
+	// Convert to time.Time (assuming absolute timestamp in milliseconds)
+	timestamp := time.UnixMilli(int64(expiryMs))
 
-	return expiryTime
+	return timestamp
 }
 
 func processByteToMap(bytes *[]byte, mapData *map[string]string) {
