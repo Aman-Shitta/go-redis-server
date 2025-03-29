@@ -38,7 +38,7 @@ func main() {
 	// start the cleanup of expired keys
 	go func() {
 		for {
-			time.Sleep(1000 * time.Millisecond)
+			time.Sleep(10 * time.Second)
 			server.CleanExpKeys()
 		}
 	}()

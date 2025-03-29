@@ -124,7 +124,10 @@ func (r *RedisServer) get(c net.Conn, args []string) error {
 	}
 
 	response, ok := SessionStore.Data[args[0]]
-	if ok && !(time.Now().Compare(ExpKeys[args[0]]) >= 0) {
+	expiry, exists := ExpKeys[args[0]]
+	if ok && (!exists || time.Now().Compare(expiry) < 0) {
+
+		// if ok && !(time.Now().Compare(ExpKeys[args[0]]) >= 0) {
 		resp := utils.ToBulkString([]string{response}...)
 		// c.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(response), response)))
 		c.Write([]byte(resp))
