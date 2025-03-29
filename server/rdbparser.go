@@ -39,7 +39,8 @@ func ParseRDB(data []byte) {
 		// skipping aux and meta data
 		if b == SELECTDB {
 			// read DB number
-			dnNumber := ReadByte(&data)
+			// dnNumber := ReadByte(&data)
+			_ = ReadByte(&data)
 			var x []byte
 			copy(data, x)
 			var err error
