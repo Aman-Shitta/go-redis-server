@@ -40,7 +40,6 @@ func ParseRDB(data []byte) {
 		if b == SELECTDB {
 			// read DB number
 			dnNumber := ReadByte(&data)
-			fmt.Println("DB number :", dnNumber)
 			var x []byte
 			copy(data, x)
 			var err error
@@ -60,9 +59,6 @@ func ParseRDB(data []byte) {
 // given a list of bytes
 // process the database bytes to key value
 func processDBKV(bytes []byte) (map[string]string, error) {
-
-	// TODO: need to start reading from RESIZEDB
-	fmt.Println("Need to process DB : ", bytes)
 
 	var mapData = make(map[string]string)
 
@@ -112,15 +108,13 @@ func processByteToMap(bytes *[]byte, mapData *map[string]string) {
 			for range 8 {
 				tsb = append(tsb, ReadByte(bytes))
 			}
-			fmt.Println("tsb :: ", tsb)
 			exp = bytesToTimestamp(tsb)
 			continue
 		}
 
 		if b == 0x00 {
 			k, v := readKeyValue(bytes)
-			fmt.Println(k, v, exp)
-			fmt.Printf("%s:%v expired @ %s\n", k, v, exp)
+
 			(*mapData)[k] = v
 			if !exp.IsZero() {
 				ExpKeys[k] = exp

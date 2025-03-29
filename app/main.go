@@ -6,7 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/codecrafters-io/redis-starter-go/server"
 	rs "github.com/codecrafters-io/redis-starter-go/server"
 	"github.com/codecrafters-io/redis-starter-go/utils"
 )
@@ -41,7 +40,7 @@ func main() {
 	go func() {
 		for {
 			time.Sleep(10 * time.Second)
-			server.CleanExpKeys()
+			rs.CleanExpKeys()
 		}
 	}()
 

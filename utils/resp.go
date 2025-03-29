@@ -108,7 +108,6 @@ func ToSimpleString(msg string, t string) string {
 	if respType, ok := Types[strings.ToUpper(t)]; ok {
 		return fmt.Sprintf("%s%s\r\n", respType, msg)
 	}
-	fmt.Println(RED, "Simple string conversion failed :: ", msg, t, RED)
 
 	return ""
 }

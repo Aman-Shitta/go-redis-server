@@ -42,12 +42,9 @@ func (r *RedisServer) config(c net.Conn, args []string) error {
 	case "dir":
 		dir := r.Cnf.Dir
 		resp = utils.ToArrayBulkString([]string{"dir", dir}...)
-
-		// resp = fmt.Sprintf("*2\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n", len("dir"), "dir", len(dir), dir)
 	case "dbfilename":
 		dbFileName := r.Cnf.Dbfilename
 		resp = utils.ToArrayBulkString([]string{"dbFileName", dbFileName}...)
-		// resp = fmt.Sprintf("*2\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n", len("dbFileName"), "dbFileName", len(dbFileName), dbFileName)
 	}
 
 	_, err := c.Write([]byte(resp))
@@ -67,8 +64,6 @@ func (r *RedisServer) echo(c net.Conn, args []string) error {
 
 	response := strings.Join(args, " ")
 	resp := utils.ToSimpleString(response, "OK")
-	// resp := fmt.Sprintf("$%d\r\n%s\r\n", len(response), response)
-	fmt.Println("resp :: ", resp)
 	c.Write([]byte(resp))
 
 	return nil
@@ -126,10 +121,7 @@ func (r *RedisServer) get(c net.Conn, args []string) error {
 	response, ok := SessionStore.Data[args[0]]
 	expiry, exists := ExpKeys[args[0]]
 	if ok && (!exists || time.Now().Compare(expiry) < 0) {
-
-		// if ok && !(time.Now().Compare(ExpKeys[args[0]]) >= 0) {
 		resp := utils.ToBulkString([]string{response}...)
-		// c.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(response), response)))
 		c.Write([]byte(resp))
 	} else {
 		c.Write([]byte("$-1\r\n"))

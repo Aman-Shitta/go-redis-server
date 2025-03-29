@@ -41,14 +41,14 @@ func (s *RedisServer) HandleConnection(c net.Conn) {
 	for {
 		var data = make([]byte, 1024)
 		_, err := c.Read(data)
-		fmt.Println("connection data : ", string(data))
+
 		if err != nil {
 			fmt.Println("Error handling requests : ", err.Error())
 			return
 		}
 
 		command, args, err := utils.ParseResp(data)
-		fmt.Println("command, args :: ", command, args)
+
 		if err != nil {
 			c.Write([]byte(fmt.Sprintf("-ERR %s\r\n", err.Error())))
 			continue
@@ -70,7 +70,5 @@ func (s *RedisServer) HandleConnection(c net.Conn) {
 
 			continue
 		}
-		// c.Write([]byte("+PONG\r\n"))
-		// fmt.Println("[+] READ something [+]")
 	}
 }
