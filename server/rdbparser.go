@@ -1,8 +1,10 @@
 package server
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
+	"time"
 
 	"github.com/codecrafters-io/redis-starter-go/utils"
 )
@@ -72,16 +74,34 @@ func processDBKV(bytes []byte) (map[string]string, error) {
 	return mapData, nil
 }
 
+func bytesToTimestamp(b []byte) time.Time {
+	var timestamp int64
+	buf := bytes.NewReader(b)
+
+	// Assuming big-endian byte order
+	err := binary.Read(buf, binary.BigEndian, &timestamp)
+	if err != nil {
+		// Handle error appropriately
+		panic(err)
+	}
+
+	return time.Unix(timestamp, 0)
+}
+
 func processByteToMap(bytes *[]byte, mapData *map[string]string) {
 
 	for {
 		b := ReadByte(bytes)
 
 		if b == 0x00 {
-			k, v := readKeyValue(bytes)
+			k, v, exp := readKeyValue(bytes)
+			fmt.Printf("%s:%v expired @ %s\n", k, v, exp.Format("2006-01-02 15:04:05"))
 			(*mapData)[k] = v
+			if !exp.IsZero() {
+				ExpKeys[k] = exp
+			}
 		}
-		if b == 0xff || b == 0xfe {
+		if b == EOF || b == SELECTDB {
 			utils.LogEntry("pink", "[+] rdb ended [+]")
 			return
 		}
@@ -89,21 +109,34 @@ func processByteToMap(bytes *[]byte, mapData *map[string]string) {
 }
 
 // ReadKeyValue reads a key-value pair from RDB
-func readKeyValue(data *[]byte) (string, string) {
+func readKeyValue(data *[]byte) (string, string, time.Time) {
 	fmt.Println("rkv data :: ", data)
 	var key, value string
+	var ts time.Time
+
+	key_size := ReadByte(data)
+
 	t := ReadByte(data)
-	fmt.Println("t 1: ", t, data)
-	for range int(t) {
+	if t == EXPIRETIMEMS {
+		// read next 8 bytes timestamp
+		var tsb []byte
+		for range 8 {
+			tsb = append(tsb, ReadByte(data))
+		}
+		ts = bytesToTimestamp(tsb)
+	} else {
+		// add the byte back to orignal data
+		(*data) = append([]byte{t}, (*data)...)
+	}
+
+	for range int(key_size) {
 		key += string(ReadByte(data))
 	}
-	fmt.Println("key :: ", key)
-	t = ReadByte(data)
-	fmt.Println("t 2: ", t, data)
-	for range int(t) {
+
+	value_size := ReadByte(data)
+	for range int(value_size) {
 		value += string(ReadByte(data))
 	}
-	fmt.Println("value :: ", value)
 
-	return key, value
+	return key, value, ts
 }

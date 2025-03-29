@@ -68,18 +68,3 @@ func (c *Config) AutoLoad() error {
 
 	return nil
 }
-
-// func readTillAux(data []byte) ([]byte, []byte) {
-
-// 	var before, after []byte
-
-// 	for idx := range len(data) {
-// 		if data[idx] == AUX {
-// 			after = data[idx+1:]
-// 			break
-// 		} else {
-// 			before = append(before, data[idx])
-// 		}
-// 	}
-// 	return before, after
-// }

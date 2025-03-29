@@ -4,7 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
+	"github.com/codecrafters-io/redis-starter-go/server"
 	rs "github.com/codecrafters-io/redis-starter-go/server"
 	"github.com/codecrafters-io/redis-starter-go/utils"
 )
@@ -20,7 +22,7 @@ func main() {
 	var PORT uint = 6379
 
 	// Define command-line flags
-	dir := flag.String("dir", "/tmp/redis", "Directory to store RDB file")
+	dir := flag.String("dir", "redis", "Directory to store RDB file")
 	dbFileName := flag.String("dbfilename", "dump.rdb", "RDB file name")
 
 	// Parse the command-line flags
@@ -32,6 +34,14 @@ func main() {
 	// Load the persistent data from file.
 	redisServer.Cnf.AutoLoad()
 	// os.Exit(-1)
+
+	// start the cleanup of expired keys
+	go func() {
+		for {
+			time.Sleep(1000 * time.Millisecond)
+			server.CleanExpKeys()
+		}
+	}()
 
 	// start the redis server
 	l, err := redisServer.Start(PORT)
