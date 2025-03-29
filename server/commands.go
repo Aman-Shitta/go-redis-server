@@ -25,10 +25,20 @@ func (r *RedisServer) ProcessCommand(c string) (func(net.Conn, []string) error, 
 		return r.config, nil
 	case "keys":
 		return r.keys, nil
+	case "info":
+		return r.info, nil
 	default:
 		utils.LogEntry("blink", "Default case triggered :: ", c)
 		return nil, fmt.Errorf("not yet implemented")
 	}
+}
+
+func (r *RedisServer) info(c net.Conn, args []string) error {
+
+	rs := "role:master"
+	resp := utils.ToBulkString(rs)
+	c.Write([]byte(resp))
+	return nil
 }
 
 func (r *RedisServer) config(c net.Conn, args []string) error {

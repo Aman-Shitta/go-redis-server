@@ -129,9 +129,9 @@ func processByteToMap(bytes *[]byte, mapData *map[string]string) {
 // ReadKeyValue reads a key-value pair from RDB
 func readKeyValue(data *[]byte) (string, string) {
 
-	for _, b := range *data {
-		fmt.Printf("%02X ", b) // Ensures two-digit hex values
-	}
+	// for _, b := range *data {
+	// 	fmt.Printf("%02X ", b) // Ensures two-digit hex values
+	// }
 
 	var key, value string
 
