@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"time"
@@ -82,17 +81,18 @@ func processDBKV(bytes []byte) (map[string]string, error) {
 }
 
 func bytesToTimestamp(b []byte) time.Time {
-	var timestamp int64
-	buf := bytes.NewReader(b)
-
-	// Assuming big-endian byte order
-	err := binary.Read(buf, binary.BigEndian, &timestamp)
-	if err != nil {
-		// Handle error appropriately
-		panic(err)
+	// ConvertExpiryTime converts 8 bytes of little-endian data into a Go time.Time object
+	if len(b) != 8 {
+		return time.Time{}
 	}
 
-	return time.Unix(timestamp, 0)
+	// Convert bytes to uint64 using LittleEndian
+	expiryMs := binary.LittleEndian.Uint64(b)
+
+	// Convert milliseconds to time.Time
+	expiryTime := time.UnixMilli(int64(expiryMs))
+
+	return expiryTime
 }
 
 func processByteToMap(bytes *[]byte, mapData *map[string]string) {
@@ -112,6 +112,7 @@ func processByteToMap(bytes *[]byte, mapData *map[string]string) {
 			for range 8 {
 				tsb = append(tsb, ReadByte(bytes))
 			}
+			fmt.Println("tsb :: ", tsb)
 			exp = bytesToTimestamp(tsb)
 			continue
 		}
@@ -119,7 +120,7 @@ func processByteToMap(bytes *[]byte, mapData *map[string]string) {
 		if b == 0x00 {
 			k, v := readKeyValue(bytes)
 			fmt.Println(k, v, exp)
-			fmt.Printf("%s:%v expired @ %s\n", k, v, exp.Format("2006-01-02 15:04:05"))
+			fmt.Printf("%s:%v expired @ %s\n", k, v, exp)
 			(*mapData)[k] = v
 			if !exp.IsZero() {
 				ExpKeys[k] = exp
