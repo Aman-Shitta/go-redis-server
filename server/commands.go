@@ -27,10 +27,20 @@ func (r *RedisServer) ProcessCommand(c string) (func(net.Conn, []string) error, 
 		return r.keys, nil
 	case "info":
 		return r.info, nil
+	// handshake commands
+	case "replconf":
+		return r.replconf, nil
 	default:
 		utils.LogEntry("crossed", "Default case triggered :: ", c)
 		return nil, fmt.Errorf("not yet implemented")
 	}
+}
+
+func (r *RedisServer) replconf(c net.Conn, args []string) error {
+
+	resp := utils.ToSimpleString("OK", "OK")
+	c.Write([]byte(resp))
+	return nil
 }
 
 func (r *RedisServer) info(c net.Conn, args []string) error {

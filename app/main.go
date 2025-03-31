@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -12,21 +11,6 @@ import (
 	rs "github.com/codecrafters-io/redis-starter-go/server"
 	"github.com/codecrafters-io/redis-starter-go/utils"
 )
-
-func MasterSlaveHandshake(ip string, port int) error {
-
-	addr := fmt.Sprintf("%s:%d", ip, port)
-	c, err := net.Dial("tcp", addr)
-	if err != nil {
-		return err
-	}
-
-	// send PING to master
-	ping := utils.ToArrayBulkString("PING")
-
-	c.Write([]byte(ping))
-	return nil
-}
 
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -64,7 +48,7 @@ func main() {
 
 		fmt.Println("(master_IP, master_PORT) :: ", master_IP, master_PORT)
 
-		err = MasterSlaveHandshake(master_IP, master_PORT)
+		err = rs.InitiateHandshake(master_IP, master_PORT)
 		if err != nil {
 			panic("handhaske error : " + err.Error())
 		}
