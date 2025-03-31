@@ -30,6 +30,8 @@ func (r *RedisServer) ProcessCommand(c string) (func(net.Conn, []string) error, 
 	// handshake commands
 	case "replconf":
 		return r.replconf, nil
+	case "psync":
+		return r.psync, nil
 	default:
 		utils.LogEntry("crossed", "Default case triggered :: ", c)
 		return nil, fmt.Errorf("not yet implemented")
@@ -39,6 +41,13 @@ func (r *RedisServer) ProcessCommand(c string) (func(net.Conn, []string) error, 
 func (r *RedisServer) replconf(c net.Conn, args []string) error {
 
 	resp := utils.ToSimpleString("OK", "OK")
+	c.Write([]byte(resp))
+	return nil
+}
+
+func (r *RedisServer) psync(c net.Conn, args []string) error {
+
+	resp := utils.ToSimpleString(fmt.Sprintf("FULLRESYNC %s 0", r.MasterReplicationID), "OK")
 	c.Write([]byte(resp))
 	return nil
 }

@@ -31,5 +31,10 @@ func InitiateHandshake(ip string, port int) error {
 	c.Write([]byte(replconf))
 	c.Read(d)
 
+	psync := utils.ToArrayBulkString("PSYNC", "?", "-1")
+	c.Write([]byte(psync))
+	n, _ := c.Read(d)
+	fmt.Println(d[:n])
+
 	return nil
 }
