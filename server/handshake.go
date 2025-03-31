@@ -21,10 +21,12 @@ func InitiateHandshake(ip string, port int) error {
 	c.Write([]byte(ping))
 
 	// send REPLCONF
-	replconf := utils.ToArrayBulkString("REPLFCONF", "6380")
+	replconf := utils.ToArrayBulkString("REPLCONF", "listening-port", "6380")
+	fmt.Println("replconf :: ", replconf)
 	c.Write([]byte(replconf))
 
 	replconf = utils.ToArrayBulkString("REPLCONF", "capa", "psync2")
+	fmt.Println("replconf :: ", replconf)
 	c.Write([]byte(replconf))
 
 	return nil
