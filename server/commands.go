@@ -67,7 +67,7 @@ func (r *RedisServer) replconf(c net.Conn, args []string) error {
 		return fmt.Errorf("ERR unknown REPLCONF parameter: %s", args[1])
 	}
 
-	resp := utils.ToSimpleString("OK")
+	resp := utils.ToSimpleString("OK", "OK")
 	_, err := c.Write([]byte(resp))
 	return err
 }
