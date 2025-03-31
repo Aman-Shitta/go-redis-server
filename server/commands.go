@@ -43,19 +43,19 @@ func (r *RedisServer) replconf(c net.Conn, args []string) error {
 		return fmt.Errorf("ERR wrong number of arguments for REPLCONF")
 	}
 
-	switch args[1] {
+	switch strings.ToLower(args[0]) {
 	case "listening-port":
 		if len(args) < 3 {
 			return fmt.Errorf("ERR listening-port requires a port number")
 		}
 
-		port, err := strconv.Atoi(args[2])
+		port, err := strconv.Atoi(args[1])
 		if err != nil || port < 0 || port > 65535 {
 			return fmt.Errorf("ERR invalid port number")
 		}
 
 	case "capa":
-		if len(args) < 3 {
+		if len(args) < 2 {
 			return fmt.Errorf("ERR capa requires a value")
 		}
 
