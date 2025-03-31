@@ -42,7 +42,8 @@ func (r *RedisServer) info(c net.Conn, args []string) error {
 	master_replid := fmt.Sprintf("master_replid:%s", r.MasterReplicationID)
 	master_repl_offset := fmt.Sprintf("master_repl_offset:%d", r.MasterReplicationOffset)
 
-	resp := utils.ToBulkString(fmt.Sprintf("%s,%s,%s", role, master_replid, master_repl_offset))
+	resp := utils.ToBulkString(fmt.Sprintf("%s\n%s\n%s\n", role, master_replid, master_repl_offset))
+	// resp := utils.ToBulkString(role, master_replid, master_repl_offset)
 	c.Write([]byte(resp))
 	return nil
 }
@@ -137,7 +138,7 @@ func (r *RedisServer) get(c net.Conn, args []string) error {
 	response, ok := SessionStore.Data[args[0]]
 	expiry, exists := ExpKeys[args[0]]
 	if ok && (!exists || time.Now().Compare(expiry) < 0) {
-		resp := utils.ToBulkString([]string{response}...)
+		resp := utils.ToBulkString(response)
 		c.Write([]byte(resp))
 	} else {
 		c.Write([]byte("$-1\r\n"))
