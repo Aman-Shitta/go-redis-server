@@ -45,29 +45,22 @@ func (r *RedisServer) replconf(c net.Conn, args []string) error {
 
 	switch strings.ToLower(args[0]) {
 	case "listening-port":
-		if len(args) < 2 {
-			return fmt.Errorf("ERR listening-port requires a port number")
-		}
-
 		port, err := strconv.Atoi(args[1])
 		if err != nil || port < 0 || port > 65535 {
 			return fmt.Errorf("ERR invalid port number")
 		}
 
 	case "capa":
-		if len(args) < 2 {
-			return fmt.Errorf("ERR capa requires a value")
-		}
 
-		if args[2] != "psync2" {
-			return fmt.Errorf("ERR unsupported capa value: %s", args[2])
+		if strings.ToLower(args[1]) != "eof" || strings.ToLower(args[1]) != "psync2" {
+			return fmt.Errorf("ERR invalid value for capa")
 		}
 
 	default:
-		return fmt.Errorf("ERR unknown REPLCONF parameter: %s", args[1])
+		return fmt.Errorf("ERR unknown REPLCONF parameter: %s", args[0])
 	}
 
-	resp := utils.ToSimpleString("OK", "OK")
+	resp := utils.ToSimpleString("OK")
 	_, err := c.Write([]byte(resp))
 	return err
 }
