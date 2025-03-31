@@ -35,7 +35,7 @@ func (r *RedisServer) ProcessCommand(c string) (func(net.Conn, []string) error, 
 
 func (r *RedisServer) info(c net.Conn, args []string) error {
 
-	rs := "role:master"
+	rs := fmt.Sprintf("role:%s", r.Role)
 	resp := utils.ToBulkString(rs)
 	c.Write([]byte(resp))
 	return nil

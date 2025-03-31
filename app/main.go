@@ -26,8 +26,13 @@ func main() {
 
 	port := flag.Uint("port", PORT, "Port number")
 
+	replicaof := flag.String("replicaof", "", "replica for")
 	// Parse the command-line flags
 	flag.Parse()
+
+	if (*replicaof) != "" {
+		redisServer.UpdateRole("slave")
+	}
 
 	// for the spawned server update configs accordingly
 	redisServer.Cnf.UpdateConfig(*dir, *dbFileName)

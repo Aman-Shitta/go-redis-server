@@ -12,13 +12,19 @@ type ServerInterface interface {
 }
 
 type RedisServer struct {
-	Cnf *Config
+	Cnf  *Config
+	Role string
 }
 
 func NewRedisServer() *RedisServer {
 	return &RedisServer{
-		Cnf: NewConfig(),
+		Cnf:  NewConfig(),
+		Role: "master",
 	}
+}
+
+func (r *RedisServer) UpdateRole(role string) {
+	r.Role = role
 }
 
 // start the server on supplied port
