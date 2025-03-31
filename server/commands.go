@@ -84,6 +84,11 @@ func (r *RedisServer) psync(c net.Conn, args []string) error {
 	// Send FULLRESYNC response
 	resp := utils.ToSimpleString(fmt.Sprintf("FULLRESYNC %s 0", r.MasterReplicationID), "OK")
 	_, err := c.Write([]byte(resp))
+
+	// send rdb file contents
+	content := ""
+	resp = fmt.Sprintf("$%d\r\n%s", len(content), content)
+	c.Write([]byte(resp))
 	return err
 }
 
