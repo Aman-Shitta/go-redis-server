@@ -45,7 +45,7 @@ func (r *RedisServer) replconf(c net.Conn, args []string) error {
 
 	switch strings.ToLower(args[0]) {
 	case "listening-port":
-		if len(args) < 3 {
+		if len(args) < 2 {
 			return fmt.Errorf("ERR listening-port requires a port number")
 		}
 
