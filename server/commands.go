@@ -42,7 +42,7 @@ func (r *RedisServer) info(c net.Conn, args []string) error {
 	master_replid := fmt.Sprintf("master_replid:%s", r.MasterReplicationID)
 	master_repl_offset := fmt.Sprintf("master_repl_offset:%d", r.MasterReplicationOffset)
 
-	resp := utils.ToArrayBulkString(role, master_replid, master_repl_offset)
+	resp := utils.ToBulkString(fmt.Sprintf("%s,%s,%s", role, master_replid, master_repl_offset))
 	c.Write([]byte(resp))
 	return nil
 }
