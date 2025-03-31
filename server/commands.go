@@ -75,15 +75,15 @@ func (r *RedisServer) psync(c net.Conn, args []string) error {
 		return fmt.Errorf("ERR invalid MasterReplicationID")
 	}
 
-	// Validate offset
-	offset, err := strconv.Atoi(args[1])
-	if err != nil || offset < 0 {
-		return fmt.Errorf("ERR invalid offset value")
-	}
+	// // Validate offset
+	// offset, err := strconv.Atoi(args[1])
+	// if err != nil || offset < 0 {
+	// 	return fmt.Errorf("ERR invalid offset value")
+	// }
 
 	// Send FULLRESYNC response
 	resp := utils.ToSimpleString(fmt.Sprintf("FULLRESYNC %s 0", r.MasterReplicationID), "OK")
-	_, err = c.Write([]byte(resp))
+	_, err := c.Write([]byte(resp))
 	return err
 }
 
