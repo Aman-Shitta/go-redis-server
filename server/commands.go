@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -86,7 +87,12 @@ func (r *RedisServer) psync(c net.Conn, args []string) error {
 	_, err := c.Write([]byte(resp))
 
 	// send rdb file contents
-	content := ""
+
+	content, err := os.ReadFile("empty.rdb")
+	if err != nil {
+		return err
+	}
+
 	resp = fmt.Sprintf("$%d\r\n%s", len(content), content)
 	c.Write([]byte(resp))
 	return err
