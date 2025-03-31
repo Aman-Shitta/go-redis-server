@@ -52,7 +52,7 @@ func (r *RedisServer) replconf(c net.Conn, args []string) error {
 
 	case "capa":
 
-		if strings.ToLower(args[1]) != "eof" || strings.ToLower(args[1]) != "psync2" {
+		if strings.ToLower(args[1]) != "eof" && strings.ToLower(args[1]) != "psync2" {
 			return fmt.Errorf("ERR invalid value for capa")
 		}
 
