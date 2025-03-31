@@ -3,12 +3,30 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	rs "github.com/codecrafters-io/redis-starter-go/server"
 	"github.com/codecrafters-io/redis-starter-go/utils"
 )
+
+func MasterSlaveHandshake(ip string, port int) error {
+
+	addr := fmt.Sprintf("%s:%d", ip, port)
+	c, err := net.Dial("tcp", addr)
+	if err != nil {
+		return err
+	}
+
+	// send PING to master
+	ping := utils.ToArrayBulkString("PING")
+
+	c.Write([]byte(ping))
+	return nil
+}
 
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -32,6 +50,24 @@ func main() {
 
 	if (*replicaof) != "" {
 		redisServer.UpdateRole("slave")
+		repl_args := strings.Split(*replicaof, " ")
+
+		if len(repl_args) != 2 {
+			panic("master not activated")
+		}
+		master_IP := repl_args[0]
+		master_PORT, err := strconv.Atoi(repl_args[1])
+
+		if err != nil {
+			panic("port number incorrect :: " + err.Error())
+		}
+
+		fmt.Println("(master_IP, master_PORT) :: ", master_IP, master_PORT)
+
+		err = MasterSlaveHandshake(master_IP, master_PORT)
+		if err != nil {
+			panic("handhaske error : " + err.Error())
+		}
 	}
 
 	// for the spawned server update configs accordingly
