@@ -39,17 +39,59 @@ func (r *RedisServer) ProcessCommand(c string) (func(net.Conn, []string) error, 
 }
 
 func (r *RedisServer) replconf(c net.Conn, args []string) error {
+	if len(args) < 2 {
+		return fmt.Errorf("ERR wrong number of arguments for REPLCONF")
+	}
 
-	resp := utils.ToSimpleString("OK", "OK")
-	c.Write([]byte(resp))
-	return nil
+	switch args[1] {
+	case "listening-port":
+		if len(args) < 3 {
+			return fmt.Errorf("ERR listening-port requires a port number")
+		}
+
+		port, err := strconv.Atoi(args[2])
+		if err != nil || port < 0 || port > 65535 {
+			return fmt.Errorf("ERR invalid port number")
+		}
+
+	case "capa":
+		if len(args) < 3 {
+			return fmt.Errorf("ERR capa requires a value")
+		}
+
+		if args[2] != "psync2" {
+			return fmt.Errorf("ERR unsupported capa value: %s", args[2])
+		}
+
+	default:
+		return fmt.Errorf("ERR unknown REPLCONF parameter: %s", args[1])
+	}
+
+	resp := utils.ToSimpleString("OK")
+	_, err := c.Write([]byte(resp))
+	return err
 }
 
 func (r *RedisServer) psync(c net.Conn, args []string) error {
+	if len(args) != 2 {
+		return fmt.Errorf("ERR wrong number of arguments for PSYNC")
+	}
 
+	// Validate replication ID ("?" or actual ID)
+	if args[0] != "?" && args[0] != r.MasterReplicationID {
+		return fmt.Errorf("ERR invalid MasterReplicationID")
+	}
+
+	// Validate offset
+	offset, err := strconv.Atoi(args[1])
+	if err != nil || offset < 0 {
+		return fmt.Errorf("ERR invalid offset value")
+	}
+
+	// Send FULLRESYNC response
 	resp := utils.ToSimpleString(fmt.Sprintf("FULLRESYNC %s 0", r.MasterReplicationID), "OK")
-	c.Write([]byte(resp))
-	return nil
+	_, err = c.Write([]byte(resp))
+	return err
 }
 
 func (r *RedisServer) info(c net.Conn, args []string) error {
