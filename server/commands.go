@@ -28,15 +28,21 @@ func (r *RedisServer) ProcessCommand(c string) (func(net.Conn, []string) error, 
 	case "info":
 		return r.info, nil
 	default:
-		utils.LogEntry("blink", "Default case triggered :: ", c)
+		utils.LogEntry("crossed", "Default case triggered :: ", c)
 		return nil, fmt.Errorf("not yet implemented")
 	}
 }
 
 func (r *RedisServer) info(c net.Conn, args []string) error {
 
-	rs := fmt.Sprintf("role:%s", r.Role)
-	resp := utils.ToBulkString(rs)
+	if len(args) != 0 && strings.ToLower(args[0]) != "replication" {
+		return fmt.Errorf("wrong argument : %s", args[0])
+	}
+	role := fmt.Sprintf("role:%s", r.Role)
+	master_replid := fmt.Sprintf("master_replid:%s", r.MasterReplicationID)
+	master_repl_offset := fmt.Sprintf("master_repl_offset:%d", r.MasterReplicationOffset)
+
+	resp := utils.ToArrayBulkString(role, master_replid, master_repl_offset)
 	c.Write([]byte(resp))
 	return nil
 }

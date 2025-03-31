@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"encoding/hex"
+	"math/rand"
 	"regexp"
 	"strings"
 )
@@ -29,4 +31,13 @@ func MatchPatternKeys(keys []string, pattr string) ([]string, error) {
 	}
 
 	return res, nil
+}
+
+func GenerateRandomReplID(len int) string {
+	bytes := make([]byte, len)
+	if _, err := rand.Read(bytes); err != nil {
+		return ""
+	}
+
+	return hex.EncodeToString(bytes)
 }

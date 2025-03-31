@@ -12,14 +12,18 @@ type ServerInterface interface {
 }
 
 type RedisServer struct {
-	Cnf  *Config
-	Role string
+	Cnf                     *Config
+	Role                    string
+	MasterReplicationID     string
+	MasterReplicationOffset int
 }
 
 func NewRedisServer() *RedisServer {
 	return &RedisServer{
-		Cnf:  NewConfig(),
-		Role: "master",
+		Cnf:                     NewConfig(),
+		Role:                    "master",
+		MasterReplicationID:     utils.GenerateRandomReplID(20),
+		MasterReplicationOffset: 0,
 	}
 }
 
