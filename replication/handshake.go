@@ -1,4 +1,4 @@
-package server
+package replication
 
 import (
 	"fmt"
@@ -7,13 +7,13 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/utils"
 )
 
-func InitiateHandshake(ip string, port int) error {
+func InitiateHandshake(ip string, port int) (net.Conn, error) {
 
 	addr := fmt.Sprintf("%s:%d", ip, port)
 
 	c, err := net.Dial("tcp", addr)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer c.Close()
 
@@ -36,5 +36,5 @@ func InitiateHandshake(ip string, port int) error {
 	n, _ := c.Read(d)
 	fmt.Println(d[:n])
 
-	return nil
+	return c, nil
 }

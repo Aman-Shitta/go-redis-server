@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/codecrafters-io/redis-starter-go/replication"
 	"github.com/codecrafters-io/redis-starter-go/utils"
 )
 
@@ -85,6 +86,10 @@ func (r *RedisServer) psync(c net.Conn, args []string) error {
 	// Send FULLRESYNC response
 	resp := utils.ToSimpleString(fmt.Sprintf("FULLRESYNC %s 0", r.MasterReplicationID), "OK")
 	_, err := c.Write([]byte(resp))
+
+	if err != nil {
+		return err
+	}
 
 	// send rdb file contents
 
@@ -191,6 +196,8 @@ func (r *RedisServer) set(c net.Conn, args []string) error {
 	}
 
 	c.Write([]byte(utils.ToSimpleString("OK", "OK")))
+	// Add command to replication buffer
+	replication.AddCommandToBuffer("SET", args)
 
 	return nil
 }

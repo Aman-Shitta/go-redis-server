@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/codecrafters-io/redis-starter-go/replication"
 	rs "github.com/codecrafters-io/redis-starter-go/server"
 	"github.com/codecrafters-io/redis-starter-go/utils"
 )
@@ -48,7 +49,11 @@ func main() {
 
 		fmt.Println("(master_IP, master_PORT) :: ", master_IP, master_PORT)
 
-		err = rs.InitiateHandshake(master_IP, master_PORT)
+		rc, err := replication.InitiateHandshake(master_IP, master_PORT)
+
+		// save connected replicas
+		redisServer.AddReplica(rc)
+
 		if err != nil {
 			panic("handhaske error : " + err.Error())
 		}

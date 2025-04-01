@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/codecrafters-io/redis-starter-go/replication"
 	"github.com/codecrafters-io/redis-starter-go/utils"
 )
 
@@ -16,6 +17,7 @@ type RedisServer struct {
 	Role                    string
 	MasterReplicationID     string
 	MasterReplicationOffset int
+	replicas                []net.Conn
 }
 
 func NewRedisServer() *RedisServer {
@@ -79,6 +81,42 @@ func (s *RedisServer) HandleConnection(c net.Conn) {
 			c.Write([]byte(response))
 
 			continue
+		}
+	}
+}
+
+func (s *RedisServer) AddReplica(c net.Conn) {
+	s.replicas = append(s.replicas, c)
+}
+
+// func (s *RedisServer) SyncReplica() {
+// 	for command := range replication.ReplicaCommands {
+// 		for _, replica := range s.replicas {
+// 			for cmd, args := range command {
+// 				go replication.SendCommand(append([]string{cmd}, args...), replica)
+// 			}
+// 		}
+// 	}
+// }
+
+func (s *RedisServer) SyncReplica() {
+	const workerLimit = 2                   // Limit concurrent replication workers
+	sem := make(chan struct{}, workerLimit) // Semaphore to control goroutine count
+
+	for command := range replication.ReplicaCommands {
+		for _, replica := range s.replicas {
+			for cmd, args := range command {
+				sem <- struct{}{} // Acquire a slot
+
+				go func(replica net.Conn, cmd string, args []string) {
+					defer func() { <-sem }() // Release the slot
+
+					if err := replication.SendCommand(append([]string{cmd}, args...), replica); err != nil {
+						// Handle errors (log, retry, remove dead replica, etc.)
+						fmt.Println("Error sending command to replica:", err)
+					}
+				}(replica, cmd, args)
+			}
 		}
 	}
 }
