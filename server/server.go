@@ -17,7 +17,8 @@ type RedisServer struct {
 	Role                    string
 	MasterReplicationID     string
 	MasterReplicationOffset int
-	replicas                []net.Conn
+	// replicas                []replication.Replica
+	replicas []net.Conn
 }
 
 func NewRedisServer() *RedisServer {
@@ -85,7 +86,13 @@ func (s *RedisServer) HandleConnection(c net.Conn) {
 	}
 }
 
+// func (s *RedisServer) AddReplica(path string, port uint) {
+// 	s.replicas = append(s.replicas, replication.Replica{Path: path, Port: port})
+// 	fmt.Println("Replica dded :: ", s.replicas)
+// }
+
 func (s *RedisServer) AddReplica(c net.Conn) {
+
 	s.replicas = append(s.replicas, c)
 }
 
@@ -100,22 +107,18 @@ func (s *RedisServer) AddReplica(c net.Conn) {
 // }
 
 func (s *RedisServer) SyncReplica() {
-	const workerLimit = 2                   // Limit concurrent replication workers
-	sem := make(chan struct{}, workerLimit) // Semaphore to control goroutine count
+
+	fmt.Println("replication.ReplicaCommands :: ", replication.ReplicaCommands)
 
 	for command := range replication.ReplicaCommands {
 		for _, replica := range s.replicas {
+			fmt.Println("replica :: ", replica)
 			for cmd, args := range command {
-				sem <- struct{}{} // Acquire a slot
-
-				go func(replica net.Conn, cmd string, args []string) {
-					defer func() { <-sem }() // Release the slot
-
-					if err := replication.SendCommand(append([]string{cmd}, args...), replica); err != nil {
-						// Handle errors (log, retry, remove dead replica, etc.)
-						fmt.Println("Error sending command to replica:", err)
-					}
-				}(replica, cmd, args)
+				fmt.Println("cmd, args :: ", cmd, args)
+				if err := replication.SendCommand(replica, append([]string{cmd}, args...)...); err != nil {
+					// Handle errors (log, retry, remove dead replica, etc.)
+					fmt.Println("Error sending command to replica:", err)
+				}
 			}
 		}
 	}

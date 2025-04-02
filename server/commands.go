@@ -14,6 +14,7 @@ import (
 
 func (r *RedisServer) ProcessCommand(c string) (func(net.Conn, []string) error, error) {
 
+	fmt.Println("strings.ToLower(c) :: ", strings.ToLower(c))
 	switch strings.ToLower(c) {
 	case "ping":
 		return r.ping, nil
@@ -100,6 +101,9 @@ func (r *RedisServer) psync(c net.Conn, args []string) error {
 
 	resp = fmt.Sprintf("$%d\r\n%s", len(content), content)
 	c.Write([]byte(resp))
+
+	r.replicas = append(r.replicas, c)
+
 	return err
 }
 
@@ -196,8 +200,12 @@ func (r *RedisServer) set(c net.Conn, args []string) error {
 	}
 
 	c.Write([]byte(utils.ToSimpleString("OK", "OK")))
-	// Add command to replication buffer
-	replication.AddCommandToBuffer("SET", args)
+
+	if r.Role == "master" {
+		fmt.Println("Command added to buffer :: ", "SET", args)
+		// Add command to replication buffer
+		replication.AddCommandToBuffer("SET", args)
+	}
 
 	return nil
 }

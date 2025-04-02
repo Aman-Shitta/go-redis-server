@@ -34,6 +34,10 @@ func main() {
 	flag.Parse()
 
 	if (*replicaof) != "" {
+		utils.LogEntry("RED", "[+] REPLICA STARTED [+]")
+		fmt.Println("port : ", port)
+		fmt.Println("replcaicof :: ", *replicaof)
+
 		redisServer.UpdateRole("slave")
 		repl_args := strings.Split(*replicaof, " ")
 
@@ -47,17 +51,17 @@ func main() {
 			panic("port number incorrect :: " + err.Error())
 		}
 
-		fmt.Println("(master_IP, master_PORT) :: ", master_IP, master_PORT)
+		fmt.Println("(master_IP, master_PORT) :: ", master_IP, master_PORT, *port)
 
-		rc, err := replication.InitiateHandshake(master_IP, master_PORT)
-
-		// save connected replicas
-		redisServer.AddReplica(rc)
+		err = replication.InitiateHandshake(master_IP, master_PORT, *port)
 
 		if err != nil {
 			panic("handhaske error : " + err.Error())
 		}
 	}
+
+	// Start SYncronisation
+	go redisServer.SyncReplica()
 
 	// for the spawned server update configs accordingly
 	redisServer.Cnf.UpdateConfig(*dir, *dbFileName)

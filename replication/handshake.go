@@ -7,15 +7,15 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/utils"
 )
 
-func InitiateHandshake(ip string, port int) (net.Conn, error) {
+func InitiateHandshake(ip string, port int, replicaPort uint) error {
 
 	addr := fmt.Sprintf("%s:%d", ip, port)
 
 	c, err := net.Dial("tcp", addr)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	defer c.Close()
+	// defer c.Close()
 
 	// send PING to master
 	ping := utils.ToArrayBulkString("PING")
@@ -23,7 +23,8 @@ func InitiateHandshake(ip string, port int) (net.Conn, error) {
 	var d = make([]byte, 1024)
 	c.Read(d)
 	// send REPLCONF
-	replconf := utils.ToArrayBulkString("REPLCONF", "listening-port", "6380")
+
+	replconf := utils.ToArrayBulkString("REPLCONF", "listening-port", fmt.Sprintf("%d", replicaPort))
 	c.Write([]byte(replconf))
 	c.Read(d)
 
@@ -36,5 +37,5 @@ func InitiateHandshake(ip string, port int) (net.Conn, error) {
 	n, _ := c.Read(d)
 	fmt.Println(d[:n])
 
-	return c, nil
+	return nil
 }
