@@ -17,10 +17,6 @@ func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")
 
-	// Uncomment this block to pass the first stage
-
-	var redisServer = rs.NewRedisServer()
-
 	var PORT uint = 6379
 
 	// Define command-line flags
@@ -33,17 +29,21 @@ func main() {
 	// Parse the command-line flags
 	flag.Parse()
 
+	var redisServer = rs.NewRedisServer()
+	// start the redis server
+	l, err := redisServer.Start(*port)
+
 	if (*replicaof) != "" {
-		utils.LogEntry("RED", "[+] REPLICA STARTED [+]")
-		fmt.Println("port : ", port)
-		fmt.Println("replcaicof :: ", *replicaof)
+		utils.LogEntry("RED", fmt.Sprintf("[+] REPLICA STARTED @ %d | master : %s [+]", *port, *replicaof))
 
 		redisServer.UpdateRole("slave")
+
 		repl_args := strings.Split(*replicaof, " ")
 
 		if len(repl_args) != 2 {
-			panic("master not activated")
+			panic("master not provided for this slave instance")
 		}
+
 		master_IP := repl_args[0]
 		master_PORT, err := strconv.Atoi(repl_args[1])
 
@@ -53,37 +53,39 @@ func main() {
 
 		fmt.Println("(master_IP, master_PORT) :: ", master_IP, master_PORT, *port)
 
-		err = replication.InitiateHandshake(master_IP, master_PORT, *port)
+		rep, err := replication.InitiateHandshake(master_IP, master_PORT, *port)
 
 		if err != nil {
-			panic("handhaske error : " + err.Error())
+			panic("handshake error : " + err.Error())
 		}
+
+		// ✅ Now continuously read & apply replication data
+		go redisServer.PropogateCommands(rep)
 	}
 
-	// Start SYncronisation
-	go redisServer.SyncReplica()
+	if redisServer.Role == "master" {
+		// for the spawned server update configs accordingly
+		redisServer.Cnf.UpdateConfig(*dir, *dbFileName)
 
-	// for the spawned server update configs accordingly
-	redisServer.Cnf.UpdateConfig(*dir, *dbFileName)
+		// Load the persistent data from file.
+		redisServer.Cnf.AutoLoad()
+		// os.Exit(-1)
 
-	// Load the persistent data from file.
-	redisServer.Cnf.AutoLoad()
-	// os.Exit(-1)
+		go redisServer.SyncReplica()
 
-	// start the cleanup of expired keys
-	go func() {
-		for {
-			time.Sleep(10 * time.Second)
-			rs.CleanExpKeys()
+		// start the cleanup of expired keys
+		go func() {
+			for {
+				time.Sleep(10 * time.Second)
+				rs.CleanExpKeys()
+			}
+		}()
+
+		if err != nil {
+			utils.LogEntry("RED", "Failed to start redis server : ", err.Error())
+			os.Exit(1)
 		}
-	}()
 
-	// start the redis server
-	l, err := redisServer.Start(*port)
-
-	if err != nil {
-		utils.LogEntry("RED", "Failed to start redis server : ", err.Error())
-		os.Exit(1)
 	}
 
 	for {

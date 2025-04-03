@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"net"
+	"sync"
 
 	"github.com/codecrafters-io/redis-starter-go/replication"
 	"github.com/codecrafters-io/redis-starter-go/utils"
@@ -13,6 +14,7 @@ type ServerInterface interface {
 }
 
 type RedisServer struct {
+	sync.Mutex
 	Cnf                     *Config
 	Role                    string
 	MasterReplicationID     string
@@ -46,9 +48,11 @@ func (s *RedisServer) Start(port uint) (net.Listener, error) {
 }
 
 func (s *RedisServer) HandleConnection(c net.Conn) {
+	utils.LogEntry("PINK", s.Role, "[+] ------------------Connection started ------------------ [+]")
 	defer func(c net.Conn) {
 		c.Close()
-		fmt.Println("[-]Connection Closed [-]")
+		// fmt.Printf("%s => [-]Connection Closed [-]\n", s.Role)
+		utils.LogEntry("PINK", s.Role, "[+] ------------------Connection closed ------------------ [+]")
 	}(c)
 
 	for {
@@ -56,7 +60,7 @@ func (s *RedisServer) HandleConnection(c net.Conn) {
 		_, err := c.Read(data)
 
 		if err != nil {
-			fmt.Println("Error handling requests : ", err.Error())
+			fmt.Println(s.Role, " => Error handling requests : ", err.Error())
 			return
 		}
 
@@ -96,16 +100,6 @@ func (s *RedisServer) AddReplica(c net.Conn) {
 	s.replicas = append(s.replicas, c)
 }
 
-// func (s *RedisServer) SyncReplica() {
-// 	for command := range replication.ReplicaCommands {
-// 		for _, replica := range s.replicas {
-// 			for cmd, args := range command {
-// 				go replication.SendCommand(append([]string{cmd}, args...), replica)
-// 			}
-// 		}
-// 	}
-// }
-
 func (s *RedisServer) SyncReplica() {
 
 	fmt.Println("replication.ReplicaCommands :: ", replication.ReplicaCommands)
@@ -120,6 +114,65 @@ func (s *RedisServer) SyncReplica() {
 					fmt.Println("Error sending command to replica:", err)
 				}
 			}
+		}
+	}
+}
+
+func (s *RedisServer) PropogateCommands(rep net.Conn) {
+
+	defer rep.Close()
+
+	if s.Role != "slave" {
+		fmt.Println("[ERROR] SyncReplica should only run on a slave instance")
+		return
+	}
+
+	buffer := make([]byte, 4096) // Read buffer
+
+	for {
+		n, err := rep.Read(buffer)
+		if err != nil {
+			fmt.Println("[ERROR] Master connection lost:", err)
+			break
+		}
+
+		data := buffer[:n]
+
+		// skip if read data
+		if data[0] != '*' {
+			continue
+		}
+
+		// for len(data) > 0 {
+		fmt.Println("data :: ", data)
+
+		command_item, err := utils.ParseRESPCommands(data)
+		if err != nil {
+			fmt.Println("Cannot procees the data to get commands :: ", data)
+			continue
+		}
+
+		fmt.Println("command_item :: ", command_item)
+
+		if len(command_item) == 0 {
+			continue
+		}
+
+		for _, command := range command_item {
+			// Parse and execute the command
+			c, args, err := utils.ParseResp([]byte(command))
+			if err != nil {
+				fmt.Println("[ERROR] Failed to parse command:", err)
+				continue
+			}
+
+			fn, err := s.ProcessCommand(c)
+			if err != nil {
+				fmt.Println("[ERROR] Command processing failed:", err)
+				continue
+			}
+
+			_ = fn(rep, args) // Execute the command function
 		}
 	}
 }

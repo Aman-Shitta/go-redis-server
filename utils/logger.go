@@ -60,8 +60,23 @@ var colorMap = map[string]string{
 	"crossed":      CROSSED,
 }
 
+// // LogEntry logs a message with the specified color
+// func LogEntry(userColor string, msg ...string) {
+// 	color, exists := colorMap[strings.ToLower(userColor)]
+// 	if !exists {
+// 		color = END
+// 	}
+
+// 	var p strings.Builder
+// 	for _, m := range msg {
+// 		p.WriteString(m)
+// 	}
+
+// 	fmt.Println(color + p.String() + END)
+// }
+
 // LogEntry logs a message with the specified color
-func LogEntry(userColor string, msg ...string) {
+func LogEntry(userColor string, msg ...interface{}) {
 	color, exists := colorMap[strings.ToLower(userColor)]
 	if !exists {
 		color = END
@@ -69,7 +84,8 @@ func LogEntry(userColor string, msg ...string) {
 
 	var p strings.Builder
 	for _, m := range msg {
-		p.WriteString(m)
+		p.WriteString(fmt.Sprint(m)) // Convert each argument to a string
+		p.WriteString(" ")           // Add space between arguments like Println
 	}
 
 	fmt.Println(color + p.String() + END)

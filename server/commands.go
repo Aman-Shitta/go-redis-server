@@ -14,7 +14,7 @@ import (
 
 func (r *RedisServer) ProcessCommand(c string) (func(net.Conn, []string) error, error) {
 
-	fmt.Println("strings.ToLower(c) :: ", strings.ToLower(c))
+	fmt.Println(r.Role, " => strings.ToLower(c) :: ", strings.ToLower(c))
 	switch strings.ToLower(c) {
 	case "ping":
 		return r.ping, nil
@@ -102,7 +102,9 @@ func (r *RedisServer) psync(c net.Conn, args []string) error {
 	resp = fmt.Sprintf("$%d\r\n%s", len(content), content)
 	c.Write([]byte(resp))
 
+	r.Lock()
 	r.replicas = append(r.replicas, c)
+	r.Unlock()
 
 	return err
 }
@@ -165,6 +167,7 @@ func (r *RedisServer) set(c net.Conn, args []string) error {
 	if len(args) < 2 {
 		return fmt.Errorf("syntax error")
 	}
+
 	key := args[0]
 	value := args[1]
 
@@ -182,30 +185,31 @@ func (r *RedisServer) set(c net.Conn, args []string) error {
 		fmt.Println("expiry :: ", expiry)
 		if err != nil || expiry < 0 {
 			return fmt.Errorf("invalid PX value")
-		}
+		} else {
 
-		// Launch expiration goroutine
-		go func(key string, exp int) {
+			// Launch expiration goroutine
+			go func(key string, exp int) {
 
-			time.Sleep(time.Duration(exp) * time.Millisecond)
-			SessionStore.Lock()
-			delete(SessionStore.Data, key)
-
-			// Only delete if the key is still the same value
-			if v, exists := SessionStore.Data[key]; exists && v == value {
+				time.Sleep(time.Duration(exp) * time.Millisecond)
+				SessionStore.Lock()
 				delete(SessionStore.Data, key)
-			}
-			SessionStore.Unlock()
-		}(key, expiry)
-	}
 
-	c.Write([]byte(utils.ToSimpleString("OK", "OK")))
+				// Only delete if the key is still the same value
+				if v, exists := SessionStore.Data[key]; exists && v == value {
+					delete(SessionStore.Data, key)
+				}
+				SessionStore.Unlock()
+			}(key, expiry)
+		}
+	}
 
 	if r.Role == "master" {
 		fmt.Println("Command added to buffer :: ", "SET", args)
 		// Add command to replication buffer
 		replication.AddCommandToBuffer("SET", args)
 	}
+
+	c.Write([]byte(utils.ToSimpleString("OK", "OK")))
 
 	return nil
 }
@@ -214,7 +218,7 @@ func (r *RedisServer) get(c net.Conn, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("GET requires an argument")
 	}
-
+	fmt.Println(r.Role, " => store:  ", SessionStore.Data)
 	response, ok := SessionStore.Data[args[0]]
 	expiry, exists := ExpKeys[args[0]]
 	if ok && (!exists || time.Now().Compare(expiry) < 0) {
