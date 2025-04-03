@@ -3,6 +3,8 @@ package server
 import (
 	"fmt"
 	"net"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/codecrafters-io/redis-starter-go/replication"
@@ -21,6 +23,7 @@ type RedisServer struct {
 	MasterReplicationOffset int
 	// replicas                []replication.Replica
 	replicas []net.Conn
+	Offset   int
 }
 
 func NewRedisServer() *RedisServer {
@@ -120,7 +123,10 @@ func (s *RedisServer) SyncReplica() {
 
 func (s *RedisServer) PropogateCommands(rep net.Conn) {
 
-	defer rep.Close()
+	defer func() {
+		rep.Close()
+		fmt.Println("Closed ")
+	}()
 
 	if s.Role != "slave" {
 		fmt.Println("[ERROR] SyncReplica should only run on a slave instance")
@@ -137,22 +143,26 @@ func (s *RedisServer) PropogateCommands(rep net.Conn) {
 		}
 
 		data := buffer[:n]
+		fmt.Println("-----------------------------------------")
+		fmt.Println("read data : ", string(data))
+		fmt.Println("-----------------------------------------")
 
+		if strings.Contains(strings.ToLower(string(data)), "replconf") {
+			resp := utils.ToArrayBulkString("REPLCONF", "ACK", strconv.Itoa(s.Offset))
+			rep.Write([]byte(resp))
+			continue
+		}
 		// skip if read data
 		if data[0] != '*' {
 			continue
 		}
 
-		// for len(data) > 0 {
-		fmt.Println("data :: ", data)
-
 		command_item, err := utils.ParseRESPCommands(data)
+		fmt.Println("Command Itesm :: ", command_item)
 		if err != nil {
 			fmt.Println("Cannot procees the data to get commands :: ", data)
 			continue
 		}
-
-		fmt.Println("command_item :: ", command_item)
 
 		if len(command_item) == 0 {
 			continue
@@ -161,6 +171,7 @@ func (s *RedisServer) PropogateCommands(rep net.Conn) {
 		for _, command := range command_item {
 			// Parse and execute the command
 			c, args, err := utils.ParseResp([]byte(command))
+			fmt.Println("c :: ", c, " args :: ", args)
 			if err != nil {
 				fmt.Println("[ERROR] Failed to parse command:", err)
 				continue

@@ -59,7 +59,6 @@ func main() {
 			panic("handshake error : " + err.Error())
 		}
 
-		// ✅ Now continuously read & apply replication data
 		go redisServer.PropogateCommands(rep)
 	}
 

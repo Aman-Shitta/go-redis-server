@@ -36,8 +36,18 @@ func InitiateHandshake(ip string, port int, replicaPort uint) (net.Conn, error) 
 	// Send PSYNC
 	psync := utils.ToArrayBulkString("PSYNC", "?", "-1")
 	c.Write([]byte(psync))
-	n, _ = c.Read(d)
-	fmt.Println("[DEBUG] PSYNC Response: ", string(d[:n]))
+
+	// time.Sleep(time.Second * 1)
+	// n, _ = c.Read(d) // Read response from master
+	// fmt.Println("[DEBUG] PSYNC Response: ", string(d[:n]), "||||")
+
+	// n, _ = c.Read(d) // Read response from master
+	// // Read the RDB file before handling further commands
+	// fmt.Println("[DEBUG] Read RDB:", d[:n])
+
+	// // Now the connection is ready to receive further replication commands
+	// n, _ = c.Read(d) // This will now read the next command (e.g., REPLCONF GETACK)
+	// fmt.Println("[DEBUG] Received after RDB:", string(d[:n]))
 
 	return c, nil
 }

@@ -45,6 +45,9 @@ func (r *RedisServer) replconf(c net.Conn, args []string) error {
 	if len(args) < 2 {
 		return fmt.Errorf("ERR wrong number of arguments for REPLCONF")
 	}
+	fmt.Println("replconf args :: ", args)
+	// default response
+	resp := utils.ToSimpleString("OK", "OK")
 
 	switch strings.ToLower(args[0]) {
 	case "listening-port":
@@ -59,11 +62,15 @@ func (r *RedisServer) replconf(c net.Conn, args []string) error {
 			return fmt.Errorf("ERR invalid value for capa")
 		}
 
+	case "getack":
+		if r.Role == "slave" {
+			resp = utils.ToArrayBulkString("REPLCONF", "ACK", strconv.Itoa(r.Offset))
+		}
+
 	default:
 		return fmt.Errorf("ERR unknown REPLCONF parameter: %s", args[0])
 	}
 
-	resp := utils.ToSimpleString("OK", "OK")
 	_, err := c.Write([]byte(resp))
 	return err
 }
@@ -77,12 +84,6 @@ func (r *RedisServer) psync(c net.Conn, args []string) error {
 	if args[0] != "?" && args[0] != r.MasterReplicationID {
 		return fmt.Errorf("ERR invalid MasterReplicationID")
 	}
-
-	// // Validate offset
-	// offset, err := strconv.Atoi(args[1])
-	// if err != nil || offset < 0 {
-	// 	return fmt.Errorf("ERR invalid offset value")
-	// }
 
 	// Send FULLRESYNC response
 	resp := utils.ToSimpleString(fmt.Sprintf("FULLRESYNC %s 0", r.MasterReplicationID), "OK")
@@ -204,12 +205,13 @@ func (r *RedisServer) set(c net.Conn, args []string) error {
 	}
 
 	if r.Role == "master" {
+		c.Write([]byte(utils.ToSimpleString("OK", "OK")))
+
 		fmt.Println("Command added to buffer :: ", "SET", args)
 		// Add command to replication buffer
 		replication.AddCommandToBuffer("SET", args)
-	}
 
-	c.Write([]byte(utils.ToSimpleString("OK", "OK")))
+	}
 
 	return nil
 }
