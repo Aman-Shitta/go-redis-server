@@ -20,8 +20,8 @@ func main() {
 	var PORT uint = 6379
 
 	// Define command-line flags
-	dir := flag.String("dir", "redis", "Directory to store RDB file")
-	dbFileName := flag.String("dbfilename", "dump.rdb", "RDB file name")
+	dir := flag.String("dir", "", "Directory to store RDB file")
+	dbFileName := flag.String("dbfilename", "", "RDB file name")
 
 	port := flag.Uint("port", PORT, "Port number")
 

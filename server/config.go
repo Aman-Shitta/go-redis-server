@@ -29,8 +29,8 @@ type Config struct {
 
 func NewConfig() *Config {
 	return &Config{
-		Dir:        "/tmp/redis",
-		Dbfilename: "dump.rdb",
+		Dir:        "",
+		Dbfilename: "",
 	}
 }
 
