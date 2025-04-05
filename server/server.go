@@ -1,9 +1,10 @@
 package server
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"net"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -109,7 +110,7 @@ func (s *RedisServer) SyncReplica() {
 
 	for command := range replication.ReplicaCommands {
 		for _, replica := range s.replicas {
-			fmt.Println("replica :: ", replica)
+			fmt.Println("replica :: ", replica.RemoteAddr().String())
 			for cmd, args := range command {
 				fmt.Println("cmd, args :: ", cmd, args)
 				if err := replication.SendCommand(replica, append([]string{cmd}, args...)...); err != nil {
@@ -125,65 +126,73 @@ func (s *RedisServer) PropogateCommands(rep net.Conn) {
 
 	defer func() {
 		rep.Close()
-		fmt.Println("Closed ")
+		fmt.Println("-----------------------------------Closed----------------------------------------")
 	}()
 
 	if s.Role != "slave" {
 		fmt.Println("[ERROR] SyncReplica should only run on a slave instance")
 		return
 	}
-
-	buffer := make([]byte, 4096) // Read buffer
-
+	x := 0
+	reader := bufio.NewReader(rep)
+	readingRDB := false
+	// k := true
+	i := 0
 	for {
-		n, err := rep.Read(buffer)
+		fmt.Println("==================================================", i)
+		// time.Sleep(1 * time.Second)
+		message, err := utils.ReadRESPMessage(reader, readingRDB)
+		// pass readingRDB to determine +2 or not
+
 		if err != nil {
-			fmt.Println("[ERROR] Master connection lost:", err)
-			break
+			if err == io.EOF && x > 10 {
+				fmt.Println("[ERROR] Connection closed or read failed:", err)
+				return
+			}
+			// } else {
+			// continue
+			// }
 		}
 
-		data := buffer[:n]
-		fmt.Println("-----------------------------------------")
-		fmt.Println("read data : ", string(data))
-		fmt.Println("-----------------------------------------")
-
-		if strings.Contains(strings.ToLower(string(data)), "replconf") {
-			resp := utils.ToArrayBulkString("REPLCONF", "ACK", strconv.Itoa(s.Offset))
-			rep.Write([]byte(resp))
-			continue
-		}
-		// skip if read data
-		if data[0] != '*' {
-			continue
+		// check if this is the FULLRESYNC
+		if strings.HasPrefix(string(message), "+FULLRESYNC") {
+			readingRDB = true
+		} else if readingRDB {
+			// After reading RDB, next command resets
+			readingRDB = false
 		}
 
-		command_item, err := utils.ParseRESPCommands(data)
-		fmt.Println("Command Itesm :: ", command_item)
+		fmt.Println(i, "Message: ", string(message), len(string(message)))
+
+		i++
+		// if message[0] == '*' {
+		c, args, err := utils.ParseResp(message)
+		fmt.Println("Command : ", c)
+		fmt.Println("args : ", args)
+
+		fmt.Println("==================================================", i)
+
 		if err != nil {
-			fmt.Println("Cannot procees the data to get commands :: ", data)
+			fmt.Println("[ERROR] Failed to parse command", err)
 			continue
 		}
 
-		if len(command_item) == 0 {
+		fmt.Println("==============================OFFSET = ", s.Offset)
+
+		// SKIP Responding to ping
+		if strings.ToLower(c) == "ping" {
+			s.Offset += len(message)
 			continue
 		}
 
-		for _, command := range command_item {
-			// Parse and execute the command
-			c, args, err := utils.ParseResp([]byte(command))
-			fmt.Println("c :: ", c, " args :: ", args)
-			if err != nil {
-				fmt.Println("[ERROR] Failed to parse command:", err)
-				continue
-			}
-
-			fn, err := s.ProcessCommand(c)
-			if err != nil {
-				fmt.Println("[ERROR] Command processing failed:", err)
-				continue
-			}
-
-			_ = fn(rep, args) // Execute the command function
+		fn, err := s.ProcessCommand(c)
+		if err != nil {
+			fmt.Println("[ERROR] Command processing failed:", err)
+			continue
 		}
+
+		_ = fn(rep, args)
+		s.Offset += len(message)
+		// }
 	}
 }

@@ -11,6 +11,8 @@ func InitiateHandshake(ip string, port int, replicaPort uint) (net.Conn, error) 
 	addr := fmt.Sprintf("%s:%d", ip, port)
 
 	c, err := net.Dial("tcp", addr)
+
+	fmt.Println("Just so you know I am listeding on :: ", c.LocalAddr().String(), " for : ", c.RemoteAddr().String())
 	if err != nil {
 		return nil, err
 	}

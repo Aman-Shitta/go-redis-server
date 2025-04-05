@@ -45,7 +45,7 @@ func (r *RedisServer) replconf(c net.Conn, args []string) error {
 	if len(args) < 2 {
 		return fmt.Errorf("ERR wrong number of arguments for REPLCONF")
 	}
-	fmt.Println("replconf args :: ", args)
+	fmt.Println("replconf args :: ", args, r.Role)
 	// default response
 	resp := utils.ToSimpleString("OK", "OK")
 
@@ -71,6 +71,7 @@ func (r *RedisServer) replconf(c net.Conn, args []string) error {
 		return fmt.Errorf("ERR unknown REPLCONF parameter: %s", args[0])
 	}
 
+	fmt.Println("Sending : ", resp)
 	_, err := c.Write([]byte(resp))
 	return err
 }
@@ -94,7 +95,6 @@ func (r *RedisServer) psync(c net.Conn, args []string) error {
 	}
 
 	// send rdb file contents
-
 	content, err := os.ReadFile("empty.rdb")
 	if err != nil {
 		return err
