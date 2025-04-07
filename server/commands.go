@@ -35,10 +35,20 @@ func (r *RedisServer) ProcessCommand(c string) (func(net.Conn, []string) error, 
 		return r.replconf, nil
 	case "psync":
 		return r.psync, nil
+	case "wait":
+		return r.wait, nil
 	default:
 		utils.LogEntry("crossed", "Default case triggered :: ", c)
 		return nil, fmt.Errorf("not yet implemented")
 	}
+}
+
+func (r *RedisServer) wait(c net.Conn, args []string) error {
+	connectedReplicas := len(r.replicas)
+	resp := utils.ToInteger(connectedReplicas)
+
+	c.Write([]byte(resp))
+	return nil
 }
 
 func (r *RedisServer) replconf(c net.Conn, args []string) error {

@@ -133,3 +133,7 @@ func ToArrayBulkString(data ...string) string {
 
 	return resp.String()
 }
+
+func ToInteger(i int) string {
+	return fmt.Sprintf("%c%d\r\n", Integer, i)
+}
