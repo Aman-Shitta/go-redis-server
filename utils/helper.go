@@ -161,3 +161,15 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+func CheckValueType(d string) (string, error) {
+
+	var err error
+	_, err = strconv.Atoi(d)
+
+	if err == nil {
+		return "integer", nil
+	} else {
+		return "string", nil
+	}
+}

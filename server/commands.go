@@ -37,6 +37,8 @@ func (r *RedisServer) ProcessCommand(c string) (func(net.Conn, []string) error, 
 		return r.psync, nil
 	case "wait":
 		return r.wait, nil
+	case "type":
+		return r.vtype, nil
 	default:
 		utils.LogEntry("crossed", "Default case triggered :: ", c)
 		return nil, fmt.Errorf("not yet implemented")
@@ -239,6 +241,24 @@ func (r *RedisServer) get(c net.Conn, args []string) error {
 	} else {
 		c.Write([]byte("$-1\r\n"))
 	}
+
+	return nil
+}
+
+func (r *RedisServer) vtype(c net.Conn, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("TYPE requires an argument")
+	}
+	t := "none"
+	fmt.Println(r.Role, " => store:  ", SessionStore.Data)
+	response, ok := SessionStore.Data[args[0]]
+	expiry, exists := ExpKeys[args[0]]
+	if ok && (!exists || time.Now().Compare(expiry) < 0) {
+
+		t, _ = utils.CheckValueType(response)
+
+	}
+	c.Write([]byte(utils.ToSimpleString(t, "OK")))
 
 	return nil
 }
