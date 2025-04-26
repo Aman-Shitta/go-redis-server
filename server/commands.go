@@ -47,14 +47,29 @@ func (r *RedisServer) ProcessCommand(c string) (func(net.Conn, []string) error, 
 	}
 }
 
+var xadd_previous_parsed_id = ""
+
 func (r *RedisServer) xadd(c net.Conn, args []string) error {
 
 	if len(args) < 4 {
 		return fmt.Errorf("ERR arguments missing")
 	}
-
+	fmt.Println("[DEBUG] xadd args : ", args)
 	streamKey := args[0]
 	streamValue := args[1]
+	resp := ""
+
+	fmt.Println("xadd_previous_parsed_id :: ", xadd_previous_parsed_id)
+	fmt.Println("streamValue :: ", streamValue)
+	if xadd_previous_parsed_id != "" {
+		if streamValue == "0-0" {
+			// xadd_previous_parsed_id = streamValue
+			return fmt.Errorf("ERR The ID specified in XADD must be greater than 0-0")
+		} else if xadd_previous_parsed_id == streamValue || streamValue[0] == '0' {
+			// xadd_previous_parsed_id = streamValue
+			return fmt.Errorf("ERR The ID specified in XADD is equal or smaller than the target stream top item")
+		}
+	}
 
 	data := map[string]string{
 		"id": streamValue,
@@ -73,8 +88,9 @@ func (r *RedisServer) xadd(c net.Conn, args []string) error {
 	SessionStore.Data[streamKey] = Item{Data: data, Type: "stream"}
 	SessionStore.Unlock()
 
-	resp := utils.ToBulkString(streamValue)
+	resp = utils.ToBulkString(streamValue)
 
+	xadd_previous_parsed_id = streamValue
 	c.Write([]byte(resp))
 
 	return nil
