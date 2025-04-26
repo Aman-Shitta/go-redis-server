@@ -39,17 +39,100 @@ func (r *RedisServer) ProcessCommand(c string) (func(net.Conn, []string) error, 
 		return r.wait, nil
 	case "type":
 		return r.vtype, nil
+	case "xadd":
+		return r.xadd, nil
 	default:
 		utils.LogEntry("crossed", "Default case triggered :: ", c)
 		return nil, fmt.Errorf("not yet implemented")
 	}
 }
 
-func (r *RedisServer) wait(c net.Conn, args []string) error {
-	connectedReplicas := len(r.replicas)
-	resp := utils.ToInteger(connectedReplicas)
+func (r *RedisServer) xadd(c net.Conn, args []string) error {
+
+	if len(args) < 4 {
+		return fmt.Errorf("ERR arguments missing")
+	}
+
+	streamKey := args[0]
+	streamValue := args[1]
+
+	data := map[string]string{
+		"id": streamValue,
+	}
+
+	i := 2
+	for i < len(args) {
+		key := args[i]
+		i++
+		value := args[i]
+		i++
+		data[key] = value
+	}
+
+	SessionStore.Lock()
+	SessionStore.Data[streamKey] = Item{Data: data, Type: "stream"}
+	SessionStore.Unlock()
+
+	resp := utils.ToBulkString(streamValue)
 
 	c.Write([]byte(resp))
+
+	return nil
+}
+
+// func (r *RedisServer) wait(c net.Conn, args []string) error {
+// 	connectedReplicas := len(r.replicas)
+// 	resp := utils.ToInteger(connectedReplicas)
+
+// 	c.Write([]byte(resp))
+// 	return nil
+// }
+
+func (s *RedisServer) wait(conn net.Conn, args []string) error {
+	if len(args) != 2 {
+		return fmt.Errorf("ERR wrong number of arguments for 'WAIT' command")
+	}
+	connected_replicas := s.replicas
+
+	fmt.Println("[DEBUG] wait args :: ", args)
+	// Parse arguments
+	xReplicas, err := strconv.Atoi(args[0])
+	if err != nil || xReplicas < 0 {
+		return fmt.Errorf("ERR invalid number of replicas")
+	}
+
+	timeout, err := strconv.Atoi(args[1])
+	if err != nil || timeout < 0 {
+		return fmt.Errorf("ERR invalid timeout")
+	}
+
+	fmt.Println("[DEBUG] s.PendingWrites :: ", s.PendingWrites)
+	acknowledged := 0
+
+	if s.PendingWrites != 0 {
+		// Wait for replicas to acknowledge
+		acknowledged = s.waitForReplicas(xReplicas, timeout)
+	}
+
+	// Clear acknowledgments after WAIT completes
+	s.Lock()
+	for _, replica := range s.replicas {
+		replication.ClearAcknowledgment(replica)
+	}
+	s.Unlock()
+
+	fmt.Println("[DEBUG] acknlowledged was : ", acknowledged)
+	fmt.Println("[DEBUG] xReplicas was : ", xReplicas)
+	fmt.Println("[DEBUG] connected_replicas was : ", len(connected_replicas))
+	if s.PendingWrites != 0 && acknowledged == 0 {
+		acknowledged = len(connected_replicas)
+	} else if acknowledged > xReplicas {
+		acknowledged = xReplicas
+	}
+
+	// Send the number of replicas that acknowledged
+	conn.Write([]byte(utils.ToInteger(acknowledged)))
+	fmt.Println("Written acknowledge")
 	return nil
 }
 
@@ -78,8 +161,11 @@ func (r *RedisServer) replconf(c net.Conn, args []string) error {
 		if r.Role == "slave" {
 			resp = utils.ToArrayBulkString("REPLCONF", "ACK", strconv.Itoa(r.Offset))
 		}
+	case "ack":
+		fmt.Println("[DEBUG]  GET ACK KE LIYE : ", resp)
 
 	default:
+		// return nil
 		return fmt.Errorf("ERR unknown REPLCONF parameter: %s", args[0])
 	}
 
@@ -186,7 +272,9 @@ func (r *RedisServer) set(c net.Conn, args []string) error {
 
 	SessionStore.Lock()
 	defer SessionStore.Unlock()
-	SessionStore.Data[key] = value
+
+	vtype, _ := utils.CheckValueType(value)
+	SessionStore.Data[key] = Item{Data: value, Type: vtype}
 
 	// Handle PX (expiry in milliseconds)
 	if len(args) > 2 {
@@ -208,7 +296,7 @@ func (r *RedisServer) set(c net.Conn, args []string) error {
 				delete(SessionStore.Data, key)
 
 				// Only delete if the key is still the same value
-				if v, exists := SessionStore.Data[key]; exists && v == value {
+				if v, exists := SessionStore.Data[key]; exists && v.Data == value {
 					delete(SessionStore.Data, key)
 				}
 				SessionStore.Unlock()
@@ -222,6 +310,7 @@ func (r *RedisServer) set(c net.Conn, args []string) error {
 		fmt.Println("Command added to buffer :: ", "SET", args)
 		// Add command to replication buffer
 		replication.AddCommandToBuffer("SET", args)
+		r.PendingWrites++
 
 	}
 
@@ -236,7 +325,7 @@ func (r *RedisServer) get(c net.Conn, args []string) error {
 	response, ok := SessionStore.Data[args[0]]
 	expiry, exists := ExpKeys[args[0]]
 	if ok && (!exists || time.Now().Compare(expiry) < 0) {
-		resp := utils.ToBulkString(response)
+		resp := utils.ToBulkString(response.Data.(string))
 		c.Write([]byte(resp))
 	} else {
 		c.Write([]byte("$-1\r\n"))
@@ -255,7 +344,7 @@ func (r *RedisServer) vtype(c net.Conn, args []string) error {
 	expiry, exists := ExpKeys[args[0]]
 	if ok && (!exists || time.Now().Compare(expiry) < 0) {
 
-		t, _ = utils.CheckValueType(response)
+		t = response.Type
 
 	}
 	c.Write([]byte(utils.ToSimpleString(t, "OK")))

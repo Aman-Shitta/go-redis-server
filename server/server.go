@@ -7,6 +7,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/codecrafters-io/redis-starter-go/replication"
 	"github.com/codecrafters-io/redis-starter-go/utils"
@@ -23,8 +24,9 @@ type RedisServer struct {
 	MasterReplicationID     string
 	MasterReplicationOffset int
 	// replicas                []replication.Replica
-	replicas []net.Conn
-	Offset   int
+	replicas      []net.Conn
+	Offset        int
+	PendingWrites int
 }
 
 func NewRedisServer() *RedisServer {
@@ -94,14 +96,39 @@ func (s *RedisServer) HandleConnection(c net.Conn) {
 	}
 }
 
-// func (s *RedisServer) AddReplica(path string, port uint) {
-// 	s.replicas = append(s.replicas, replication.Replica{Path: path, Port: port})
-// 	fmt.Println("Replica dded :: ", s.replicas)
-// }
-
 func (s *RedisServer) AddReplica(c net.Conn) {
 
 	s.replicas = append(s.replicas, c)
+}
+
+func (s *RedisServer) waitForReplicas(numReplicas int, timeout int) int {
+	acknowledged := 0
+	start := time.Now()
+
+	for {
+		s.Lock()
+		for _, replica := range s.replicas {
+
+			if s.PendingWrites == 0 {
+				return acknowledged
+			}
+
+			// Check if the replica has acknowledged (placeholder logic)
+			if replication.HasAcknowledged(replica) {
+				acknowledged++
+			}
+		}
+		s.Unlock()
+
+		if acknowledged >= numReplicas || time.Since(start).Milliseconds() >= int64(timeout) {
+			break
+		}
+
+		// Sleep briefly to avoid busy-waiting
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	return acknowledged
 }
 
 func (s *RedisServer) SyncReplica() {
@@ -116,13 +143,18 @@ func (s *RedisServer) SyncReplica() {
 				if err := replication.SendCommand(replica, append([]string{cmd}, args...)...); err != nil {
 					// Handle errors (log, retry, remove dead replica, etc.)
 					fmt.Println("Error sending command to replica:", err)
+				} else {
+					// handle the command success run
+					// Mark the replica as having acknowledged the command
+					fmt.Println("acknowledgedMarked : ", replica)
+					replication.MarkAcknowledged(replica)
 				}
 			}
 		}
 	}
 }
 
-func (s *RedisServer) PropogateCommands(rep net.Conn) {
+func (s *RedisServer) ProcessPropogatedCommands(rep net.Conn) {
 
 	defer func() {
 		rep.Close()
@@ -193,6 +225,5 @@ func (s *RedisServer) PropogateCommands(rep net.Conn) {
 
 		_ = fn(rep, args)
 		s.Offset += len(message)
-		// }
 	}
 }

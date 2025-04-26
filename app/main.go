@@ -59,7 +59,7 @@ func main() {
 			panic("handshake error : " + err.Error())
 		}
 
-		go redisServer.PropogateCommands(rep)
+		go redisServer.ProcessPropogatedCommands(rep)
 	}
 
 	if redisServer.Role == "master" {

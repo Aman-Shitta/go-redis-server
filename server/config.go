@@ -42,14 +42,18 @@ func (c *Config) UpdateConfig(dir string, dbfilename string) error {
 	return nil
 }
 
+type Item struct {
+	Data interface{}
+	Type string
+}
 type Store struct {
 	sync.Mutex
-	Data map[string]string
+	Data map[string]Item
 }
 
 // hold all data for the current session
 var SessionStore = &Store{
-	Data: make(map[string]string),
+	Data: make(map[string]Item),
 }
 
 // Loads the data from givenn RDB file

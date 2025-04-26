@@ -48,7 +48,12 @@ func ParseRDB(data []byte) {
 			if err != nil {
 				panic("something is wrong at : ParseRDB :: " + err.Error())
 			}
-			SessionStore.Data = dbmap
+			fmt.Println("dbmap :: ", dbmap)
+			for k, v := range dbmap {
+				vtype, _ := utils.CheckValueType(v)
+				SessionStore.Data[k] = Item{Data: v, Type: vtype}
+			}
+
 			break // added becuase need to read only 1 db for first exercise
 		}
 
