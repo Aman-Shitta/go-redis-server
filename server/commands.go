@@ -103,6 +103,8 @@ func (r *RedisServer) xadd(c net.Conn, args []string) error {
 			}
 		}
 		SessionStore.Unlock()
+	} else if streamID == "*" {
+		streamID = strconv.Itoa(int(time.Now().UnixMilli())) + "-0"
 	}
 
 	// addedd check for validating
