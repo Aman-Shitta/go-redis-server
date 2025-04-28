@@ -65,9 +65,18 @@ func (r *RedisServer) xrange(c net.Conn, args []string) error {
 		return fmt.Errorf("ERR item is not stream type")
 	}
 
+	if startS == "-" {
+		startS = fmt.Sprintf("%s-0", endS)
+	}
+	if endS == "+" {
+		endS = fmt.Sprintf("%s-9999", startS)
+	}
 	if startS[0] != endS[0] {
 		return fmt.Errorf("ERR range not correct")
 	}
+
+	fmt.Println("startS :: ", startS)
+	fmt.Println("endS :: ", endS)
 
 	startParts := strings.Split(startS, "-")
 
