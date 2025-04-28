@@ -41,10 +41,101 @@ func (r *RedisServer) ProcessCommand(c string) (func(net.Conn, []string) error, 
 		return r.vtype, nil
 	case "xadd":
 		return r.xadd, nil
+	case "xrange":
+		return r.xrange, nil
 	default:
 		utils.LogEntry("crossed", "Default case triggered :: ", c)
 		return nil, fmt.Errorf("not yet implemented")
 	}
+}
+
+func (r *RedisServer) xrange(c net.Conn, args []string) error {
+
+	fmt.Println("args : ", args)
+	if len(args) < 3 {
+		return fmt.Errorf("ERR arguments missing")
+	}
+
+	key := args[0]
+
+	startS, endS := args[1], args[2]
+	storedData := SessionStore.Data[key]
+
+	if storedData.Type != "stream" {
+		return fmt.Errorf("ERR item is not stream type")
+	}
+
+	if startS[0] != endS[0] {
+		return fmt.Errorf("ERR range not correct")
+	}
+
+	startParts := strings.Split(startS, "-")
+
+	start, err := strconv.Atoi(startParts[len(startParts)-1])
+	if err != nil {
+		return fmt.Errorf("ERR startS sequence not correct")
+	}
+	endParts := strings.Split(endS, "-")
+	end, err := strconv.Atoi(endParts[len(endParts)-1])
+
+	if err != nil {
+		return fmt.Errorf("ERR endS sequence not correct")
+	}
+
+	// start, err := strconv.Atoi(startS)
+	// if err != nil {
+	// 	return fmt.Errorf("ERR %s", err.Error())
+	// }
+
+	// end, err := strconv.Atoi(endS)
+	// if err != nil {
+	// 	return fmt.Errorf("ERR %s", err.Error())
+	// }
+
+	if end < start {
+		return fmt.Errorf("ERR incorrect range supplied")
+	}
+
+	resp := ""
+
+	storedItems := storedData.Data.([]map[string]string)
+
+	ix := 0
+	// var levelArrs []string
+	for _, item := range storedItems {
+		var key string
+		var values []string
+		itemKeyParts := strings.Split(item["id"], "-")
+		// base :=  itemKeyParts[0]
+		seq := itemKeyParts[len(itemKeyParts)-1]
+		seqInt, _ := strconv.Atoi(seq)
+		if !(start <= seqInt && seqInt <= end) {
+			continue
+		}
+		ix++
+		for k, v := range item {
+			if k == "id" {
+				key = v
+			} else {
+				values = append(values, k, v)
+			}
+		}
+		keyArr := utils.ToBulkString(key)
+		valArr := utils.ToArrayBulkString(values...)
+
+		resp += fmt.Sprintf("*%d\r\n%s%s", 2, keyArr, valArr)
+	}
+
+	resp = fmt.Sprintf("*%d\r\n%s", ix, resp)
+
+	// resp = fmt.Sprintf("*%d\r\n%s", len(storedItems), resp)
+
+	// fmt.Println("resp :: ", resp)
+	fmt.Println("resp :: ", strings.ReplaceAll(resp, "\r\n", "\\r\\n"))
+
+	c.Write([]byte(resp))
+
+	return nil
 }
 
 var xadd_previous_parsed_id = ""
@@ -54,55 +145,85 @@ func (r *RedisServer) xadd(c net.Conn, args []string) error {
 	if len(args) < 4 {
 		return fmt.Errorf("ERR arguments missing")
 	}
-	fmt.Println("[DEBUG] xadd args : ", args)
+
 	streamKey := args[0]
 	streamID := args[1]
 	resp := ""
 
-	fmt.Println("streamID :: ", streamID)
-	fmt.Println("==================================================")
-	fmt.Println(SessionStore.Data)
-	fmt.Println("==================================================")
-	// handle auto-increment id generation
-	if strings.HasSuffix(streamID, "-*") {
-		baseID := strings.TrimSuffix(streamID, "-*")
-		SessionStore.Lock()
+	SessionStore.Lock()
+	defer SessionStore.Unlock()
+	item, exists := SessionStore.Data[streamKey]
 
-		item, exists := SessionStore.Data[streamKey]
-		if !exists {
-			// No previous entries: start at 1
-			streamID = baseID + "-1"
-		} else {
-			prevData, ok := item.Data.(map[string]string)
-			if !ok {
-				SessionStore.Unlock()
-				return fmt.Errorf("ERR invalid stream data")
-			}
+	if exists && item.Type != "stream" {
+		return fmt.Errorf("ERR WRONGTYPE Operation against a key holding the wrong kind of value")
+	}
 
-			prevID := prevData["id"] // e.g. "1-2"
+	maxSeqId := 0
+	isDefault := true
+	// maxBase := 0
+
+	IdParts := strings.Split(streamID, "-")
+	base := IdParts[0]
+	baseInt, err := strconv.Atoi(base)
+	if err != nil {
+		baseInt = 0
+		// return fmt.Errorf("ERR invalid base number")
+	}
+
+	intermediateData, ok := item.Data.([]map[string]string)
+	if ok {
+		for _, i := range intermediateData {
+
+			prevID := i["id"]
+
 			prevParts := strings.Split(prevID, "-")
 			if len(prevParts) != 2 {
-				SessionStore.Unlock()
 				return fmt.Errorf("ERR invalid stream id format")
 			}
 
 			prevBase := prevParts[0]
-			prevSeq, err := strconv.Atoi(prevParts[1])
+			prevBaseInt, err := strconv.Atoi(prevBase)
 			if err != nil {
-				SessionStore.Unlock()
+				return fmt.Errorf("ERR invalid base number")
+			}
+
+			if prevBaseInt != baseInt {
+				// skip if the base ID isn't same
+				continue
+			}
+
+			prevSeq := prevParts[1]
+			prevSeqInt, err := strconv.Atoi(prevSeq)
+
+			if err != nil {
 				return fmt.Errorf("ERR invalid sequence number")
 			}
 
-			if baseID != prevBase {
-				// New base ID (like moving from 1-* to 2-*)
-				streamID = baseID + "-0"
-			} else {
-				// Same base, increment sequence
-				prevSeq++
-				streamID = baseID + "-" + strconv.Itoa(prevSeq)
+			if maxSeqId <= prevSeqInt {
+				maxSeqId = prevSeqInt
+				xadd_previous_parsed_id = prevID
+				isDefault = false
+			}
+
+			// maxBase = max(maxBase, prevBaseInt)
+
+		}
+	}
+
+	// handle auto-increment id generation
+	if strings.HasSuffix(streamID, "-*") {
+		if !exists {
+			// No previous entries: start at 1
+			if baseInt == 0 {
+				maxSeqId = 1
+			}
+
+		} else {
+			if !isDefault {
+				maxSeqId++
 			}
 		}
-		SessionStore.Unlock()
+		streamID = base + "-" + strconv.Itoa(maxSeqId)
 	} else if streamID == "*" {
 		streamID = strconv.Itoa(int(time.Now().UnixMilli())) + "-0"
 	}
@@ -110,29 +231,41 @@ func (r *RedisServer) xadd(c net.Conn, args []string) error {
 	// addedd check for validating
 	// entry Ids
 	if xadd_previous_parsed_id != "" {
+		for _, i := range intermediateData {
+			if streamID == i["id"] {
+				// if xadd_previous_parsed_id == streamID {
+				return fmt.Errorf("ERR The ID specified in XADD is equal or smaller than the target stream top item")
+			}
+		}
+
 		// Parse previous ID
 		prevParts := strings.Split(xadd_previous_parsed_id, "-")
 		if len(prevParts) != 2 {
 			return fmt.Errorf("ERR invalid previous ID format")
 		}
-		prevMs, _ := strconv.Atoi(prevParts[0])
-		prevSeq, _ := strconv.Atoi(prevParts[1])
+		prevMs := prevParts[0]
+		prevSeq := prevParts[1]
 
 		// Parse current incoming ID
 		currParts := strings.Split(streamID, "-")
 		if len(currParts) != 2 {
 			return fmt.Errorf("ERR invalid current ID format")
 		}
-		currMs, _ := strconv.Atoi(currParts[0])
-		currSeq, _ := strconv.Atoi(currParts[1])
+		currMs := currParts[0]
+		currSeq := currParts[1]
 
 		// Check against 0-0
-		if currMs == 0 && currSeq == 0 {
+		if currMs == "0" && currSeq == "0" {
 			return fmt.Errorf("ERR The ID specified in XADD must be greater than 0-0")
 		}
 
+		prevMsInt, _ := strconv.Atoi(prevMs)
+		currMsInt, _ := strconv.Atoi(currMs)
+
+		prevSeqInt, _ := strconv.Atoi(prevSeq)
+		currSeqInt, _ := strconv.Atoi(currSeq)
 		// Check if smaller or equal to previous
-		if currMs < prevMs || (currMs == prevMs && currSeq <= prevSeq) {
+		if currMsInt < prevMsInt || (currMsInt == prevMsInt && currSeqInt <= prevSeqInt) {
 			return fmt.Errorf("ERR The ID specified in XADD is equal or smaller than the target stream top item")
 		}
 	}
@@ -150,10 +283,13 @@ func (r *RedisServer) xadd(c net.Conn, args []string) error {
 		data[key] = value
 	}
 
-	SessionStore.Lock()
-	SessionStore.Data[streamKey] = Item{Data: data, Type: "stream"}
-	SessionStore.Unlock()
-
+	if exists {
+		newData := item.Data
+		newData = append(newData.([]map[string]string), data)
+		SessionStore.Data[streamKey] = Item{Data: newData, Type: "stream"}
+	} else {
+		SessionStore.Data[streamKey] = Item{Data: []map[string]string{data}, Type: "stream"}
+	}
 	resp = utils.ToBulkString(streamID)
 
 	xadd_previous_parsed_id = streamID
