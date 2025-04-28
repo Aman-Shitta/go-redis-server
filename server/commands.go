@@ -43,10 +43,139 @@ func (r *RedisServer) ProcessCommand(c string) (func(net.Conn, []string) error, 
 		return r.xadd, nil
 	case "xrange":
 		return r.xrange, nil
+	case "xread":
+		return r.xread, nil
 	default:
 		utils.LogEntry("crossed", "Default case triggered :: ", c)
 		return nil, fmt.Errorf("not yet implemented")
 	}
+}
+
+func deduceStreamParams(args ...string) (map[string]string, error) {
+
+	var res = make(map[string]string)
+
+	totalArgs := len(args)
+	n := totalArgs / 2
+	if totalArgs%2 != 0 {
+		return nil, fmt.Errorf("wrong param count")
+	}
+
+	for i := range n {
+		res[args[i]] = args[n+i]
+	}
+
+	return res, nil
+
+}
+
+func (r *RedisServer) xread(c net.Conn, args []string) error {
+
+	fmt.Println("args : ", args)
+	if len(args) < 3 {
+		return fmt.Errorf("ERR arguments missing")
+	}
+
+	var streamParams map[string]string
+	var err error
+
+	if strings.ToLower(args[0]) == "streams" {
+
+		streamParams, err = deduceStreamParams(args[1:]...)
+
+		if err != nil {
+			return err
+		}
+	}
+
+	if strings.ToLower(args[0]) == "block" {
+		blockUnitil := args[1]
+		fmt.Println("blockUnitil :: ", blockUnitil)
+		if strings.ToLower(args[2]) != "streams" {
+			return fmt.Errorf("wrong type ecpected streams option")
+		}
+		streamParams, err = deduceStreamParams(args[3:]...)
+
+		if err != nil {
+			return err
+		}
+	}
+	streamKeysCount := 0
+	resp := ""
+
+	fmt.Println("streamParams :: ", streamParams)
+	for streamKey, itemKey := range streamParams {
+		// streamKey := args[1]
+		streamKeysCount++
+
+		// itemKey := args[2]
+
+		storedData := SessionStore.Data[streamKey]
+
+		if storedData.Type != "stream" {
+			return fmt.Errorf("ERR item is not stream type")
+		}
+
+		storedItems := storedData.Data.([]map[string]string)
+
+		fmt.Println("itemKey :: ", itemKey)
+		fmt.Println("storedItems :: ", storedItems)
+		ix := 0
+
+		// var levelArrs []string
+		for _, item := range storedItems {
+
+			fmt.Println("Iteration :: ", item)
+
+			var key string
+			var values []string
+
+			itemParts := strings.Split(item["id"], "-")
+			fmt.Println("itemParts : ", itemParts)
+			itemBase := itemParts[0]
+			itemSeq := itemParts[len(itemParts)-1]
+
+			itemBaseInt, _ := strconv.Atoi(itemBase)
+			itemSeqInt, _ := strconv.Atoi(itemSeq)
+
+			itemKeyParts := strings.Split(itemKey, "-")
+			fmt.Println("itemKeyParts : ", itemKeyParts)
+			itemKeyBase := itemKeyParts[0]
+			itemKeyBaseInt, _ := strconv.Atoi(itemKeyBase)
+
+			itemKeySeq := itemKeyParts[len(itemKeyParts)-1]
+			itemKeySeqInt, _ := strconv.Atoi(itemKeySeq)
+
+			if itemBaseInt == itemKeyBaseInt && itemKeySeqInt < itemSeqInt {
+				for k, v := range item {
+					if k == "id" {
+						key = v
+					} else {
+						values = append(values, k, v)
+					}
+				}
+				ix++
+			}
+			keyArr := utils.ToBulkString(key)
+			valArr := utils.ToArrayBulkString(values...)
+
+			resp += fmt.Sprintf("*%d\r\n%s%s", 2, keyArr, valArr)
+		}
+
+		resp = fmt.Sprintf("*%d\r\n%s", ix, resp)
+
+		resp = fmt.Sprintf("*%d\r\n%s%s", 2, utils.ToBulkString(streamKey), resp)
+
+		resp = fmt.Sprintf("*%d\r\n%s", streamKeysCount, resp)
+	}
+	// resp = fmt.Sprintf("*%d\r\n%s", len(storedItems), resp)
+
+	// fmt.Println("resp :: ", resp)
+	fmt.Println("resp :: ", strings.ReplaceAll(resp, "\r\n", "\\r\\n"))
+
+	c.Write([]byte(resp))
+
+	return nil
 }
 
 func (r *RedisServer) xrange(c net.Conn, args []string) error {
