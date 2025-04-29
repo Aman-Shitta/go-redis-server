@@ -51,6 +51,7 @@ func (r *RedisServer) ProcessCommand(c string) (func(net.Conn, []string) error, 
 	}
 }
 
+// helper fuction for XREAD
 func deduceStreamParams(args ...string) (map[string]string, error) {
 
 	var res = make(map[string]string)
@@ -87,12 +88,18 @@ func (r *RedisServer) xread(c net.Conn, args []string) error {
 			return err
 		}
 	}
+	blockUnitilInt := 0
 
 	if strings.ToLower(args[0]) == "block" {
+
 		blockUnitil := args[1]
-		fmt.Println("blockUnitil :: ", blockUnitil)
+		blockUnitilInt, err = strconv.Atoi(blockUnitil)
+		if err != nil {
+			return fmt.Errorf("ERR block time wrong")
+		}
+
 		if strings.ToLower(args[2]) != "streams" {
-			return fmt.Errorf("wrong type ecpected streams option")
+			return fmt.Errorf("ERR wrong type ecpected streams option")
 		}
 		streamParams, err = deduceStreamParams(args[3:]...)
 
@@ -103,24 +110,23 @@ func (r *RedisServer) xread(c net.Conn, args []string) error {
 	streamKeysCount := 0
 	resp := ""
 
+	time.Sleep(time.Millisecond * time.Duration(blockUnitilInt))
+
 	fmt.Println("streamParams :: ", streamParams)
 	for streamKey, itemKey := range streamParams {
-		fmt.Println("Processing streamKey :: ", streamKey)
 		// streamKey := args[1]
 		streamKeysCount++
 
 		// itemKey := args[2]
-
+		SessionStore.Lock()
 		storedData := SessionStore.Data[streamKey]
-
+		SessionStore.Unlock()
 		if storedData.Type != "stream" {
 			return fmt.Errorf("ERR item is not stream type")
 		}
 
 		storedItems := storedData.Data.([]map[string]string)
 
-		fmt.Println("itemKey :: ", itemKey)
-		fmt.Println("storedItems :: ", storedItems)
 		ix := 0
 
 		respx := ""
@@ -128,13 +134,11 @@ func (r *RedisServer) xread(c net.Conn, args []string) error {
 		// var levelArrs []string
 		for _, item := range storedItems {
 
-			fmt.Println("Iteration :: ", item)
-
 			var key string
 			var values []string
 
 			itemParts := strings.Split(item["id"], "-")
-			fmt.Println("itemParts : ", itemParts)
+
 			itemBase := itemParts[0]
 			itemSeq := itemParts[len(itemParts)-1]
 
@@ -142,7 +146,7 @@ func (r *RedisServer) xread(c net.Conn, args []string) error {
 			itemSeqInt, _ := strconv.Atoi(itemSeq)
 
 			itemKeyParts := strings.Split(itemKey, "-")
-			fmt.Println("itemKeyParts : ", itemKeyParts)
+
 			itemKeyBase := itemKeyParts[0]
 			itemKeyBaseInt, _ := strconv.Atoi(itemKeyBase)
 
@@ -150,6 +154,7 @@ func (r *RedisServer) xread(c net.Conn, args []string) error {
 			itemKeySeqInt, _ := strconv.Atoi(itemKeySeq)
 
 			if itemBaseInt == itemKeyBaseInt && itemKeySeqInt < itemSeqInt {
+
 				for k, v := range item {
 					if k == "id" {
 						key = v
@@ -159,22 +164,34 @@ func (r *RedisServer) xread(c net.Conn, args []string) error {
 				}
 				ix++
 			}
-			keyArr := utils.ToBulkString(key)
-			valArr := utils.ToArrayBulkString(values...)
 
-			respx += fmt.Sprintf("*%d\r\n%s%s", 2, keyArr, valArr)
+			if len(values) != 0 {
+				keyArr := utils.ToBulkString(key)
+				valArr := utils.ToArrayBulkString(values...)
+
+				respx += fmt.Sprintf("*%d\r\n%s%s", 2, keyArr, valArr)
+			}
 		}
 
-		respx = fmt.Sprintf("*%d\r\n%s", ix, respx)
+		if respx != "" {
+			respx = fmt.Sprintf("*%d\r\n%s", ix, respx)
 
-		resp += fmt.Sprintf("*%d\r\n%s%s", 2, utils.ToBulkString(streamKey), respx)
+			resp += fmt.Sprintf("*%d\r\n%s%s", 2, utils.ToBulkString(streamKey), respx)
+
+		}
 
 	}
-	resp = fmt.Sprintf("*%d\r\n%s", streamKeysCount, resp)
-	// resp = fmt.Sprintf("*%d\r\n%s", len(storedItems), resp)
 
-	// fmt.Println("resp :: ", resp)
-	fmt.Println("resp :: ", strings.ReplaceAll(resp, "\r\n", "\\r\\n"))
+	if resp != "" {
+		resp = fmt.Sprintf("*%d\r\n%s", streamKeysCount, resp)
+		// resp = fmt.Sprintf("*%d\r\n%s", len(storedItems), resp)
+
+		// fmt.Println("resp :: ", resp)
+		fmt.Println("resp :: ", strings.ReplaceAll(resp, "\r\n", "\\r\\n"))
+	} else {
+		// sendf null reponse back
+		resp = "$-1\r\n"
+	}
 
 	c.Write([]byte(resp))
 
