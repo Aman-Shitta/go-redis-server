@@ -88,6 +88,16 @@ func (s *RedisServer) HandleConnection(c net.Conn) {
 			transactions[c] = []QueuedCommand{}
 			c.Write([]byte(utils.ToSimpleString("OK", "OK")))
 
+		case "discard":
+			_, exists := transactions[c]
+			if !exists {
+				c.Write([]byte("-ERR DISCARD without MULTI\r\n"))
+				continue
+			}
+
+			delete(transactions, c)
+			c.Write([]byte(utils.ToSimpleString("OK", "OK")))
+
 		case "exec":
 			queued, exists := transactions[c]
 			if !exists {
