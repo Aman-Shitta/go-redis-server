@@ -70,6 +70,8 @@ func deduceStreamParams(args ...string) (map[string]string, error) {
 
 }
 
+var ZeroBlockChan = make(chan map[string]bool)
+
 func (r *RedisServer) xread(c net.Conn, args []string) error {
 
 	fmt.Println("args : ", args)
@@ -88,12 +90,11 @@ func (r *RedisServer) xread(c net.Conn, args []string) error {
 			return err
 		}
 	}
-	blockUnitilInt := 0
 
 	if strings.ToLower(args[0]) == "block" {
 
 		blockUnitil := args[1]
-		blockUnitilInt, err = strconv.Atoi(blockUnitil)
+		blockUnitilInt, err := strconv.Atoi(blockUnitil)
 		if err != nil {
 			return fmt.Errorf("ERR block time wrong")
 		}
@@ -106,11 +107,56 @@ func (r *RedisServer) xread(c net.Conn, args []string) error {
 		if err != nil {
 			return err
 		}
+
+		// handle indefinite block
+
+		if blockUnitilInt > 0 {
+			time.Sleep(time.Millisecond * time.Duration(blockUnitilInt))
+		} else {
+			// block connection for idefinite time until required key is found
+			func() {
+			outer:
+				for {
+					time.Sleep(time.Millisecond * time.Duration(1000))
+
+					for streamKey, itemKey := range streamParams {
+						SessionStore.Lock()
+						storedData := SessionStore.Data[streamKey]
+						SessionStore.Unlock()
+
+						storedItems := storedData.Data.([]map[string]string)
+
+						fmt.Println("storedItems :: ", storedItems)
+						for _, item := range storedItems {
+
+							itemParts := strings.Split(item["id"], "-")
+
+							itemBase := itemParts[0]
+							itemSeq := itemParts[len(itemParts)-1]
+
+							itemBaseInt, _ := strconv.Atoi(itemBase)
+							itemSeqInt, _ := strconv.Atoi(itemSeq)
+
+							itemKeyParts := strings.Split(itemKey, "-")
+
+							itemKeyBase := itemKeyParts[0]
+							itemKeyBaseInt, _ := strconv.Atoi(itemKeyBase)
+
+							itemKeySeq := itemKeyParts[len(itemKeyParts)-1]
+							itemKeySeqInt, _ := strconv.Atoi(itemKeySeq)
+
+							if itemBaseInt == itemKeyBaseInt && itemKeySeqInt < itemSeqInt {
+								break outer
+							}
+						}
+					}
+				}
+			}()
+		}
 	}
+
 	streamKeysCount := 0
 	resp := ""
-
-	time.Sleep(time.Millisecond * time.Duration(blockUnitilInt))
 
 	fmt.Println("streamParams :: ", streamParams)
 	for streamKey, itemKey := range streamParams {
