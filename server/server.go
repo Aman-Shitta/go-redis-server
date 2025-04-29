@@ -96,6 +96,10 @@ func (s *RedisServer) HandleConnection(c net.Conn) {
 			}
 			delete(transactions, c)
 
+			if len(queued) == 0 {
+				c.Write([]byte("*0\r\n"))
+				continue
+			}
 			for _, qc := range queued {
 				handler, err := s.ProcessCommand(qc.Name)
 				if err != nil {
