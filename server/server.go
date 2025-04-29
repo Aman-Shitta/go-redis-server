@@ -127,9 +127,8 @@ func (s *RedisServer) HandleConnection(c net.Conn) {
 				}
 
 				if err != nil {
-					c.Write([]byte(utils.ToSimpleString(err.Error(), "ERR")))
+					resps = append(resps, "-"+err.Error()+"\r\n")
 				} else if resp != "" {
-
 					// c.Write([]byte(resp))
 					resps = append(resps, resp)
 				}
@@ -138,6 +137,7 @@ func (s *RedisServer) HandleConnection(c net.Conn) {
 			r := strings.Join(resps, "")
 			r = fmt.Sprintf("*%d\r\n%s", len(resps), r)
 
+			fmt.Println("[DEBUG] sending :: ", strings.ReplaceAll(r, "\r\n", "\\r\\n"))
 			c.Write([]byte(r))
 
 		default:
