@@ -72,7 +72,7 @@ func (r *RedisServer) incr(c net.Conn, args []string) error {
 		value++
 	}
 
-	SessionStore.Data[args[0]] = Item{Data: value, Type: "integer"}
+	SessionStore.Data[args[0]] = Item{Data: fmt.Sprintf("%d", value), Type: "integer"}
 
 	resp := utils.ToInteger(value)
 	_, err := c.Write([]byte(resp))
