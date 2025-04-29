@@ -105,6 +105,7 @@ func (r *RedisServer) xread(c net.Conn, args []string) error {
 
 	fmt.Println("streamParams :: ", streamParams)
 	for streamKey, itemKey := range streamParams {
+		fmt.Println("Processing streamKey :: ", streamKey)
 		// streamKey := args[1]
 		streamKeysCount++
 
@@ -121,6 +122,8 @@ func (r *RedisServer) xread(c net.Conn, args []string) error {
 		fmt.Println("itemKey :: ", itemKey)
 		fmt.Println("storedItems :: ", storedItems)
 		ix := 0
+
+		respx := ""
 
 		// var levelArrs []string
 		for _, item := range storedItems {
@@ -159,15 +162,15 @@ func (r *RedisServer) xread(c net.Conn, args []string) error {
 			keyArr := utils.ToBulkString(key)
 			valArr := utils.ToArrayBulkString(values...)
 
-			resp += fmt.Sprintf("*%d\r\n%s%s", 2, keyArr, valArr)
+			respx += fmt.Sprintf("*%d\r\n%s%s", 2, keyArr, valArr)
 		}
 
-		resp = fmt.Sprintf("*%d\r\n%s", ix, resp)
+		respx = fmt.Sprintf("*%d\r\n%s", ix, respx)
 
-		resp = fmt.Sprintf("*%d\r\n%s%s", 2, utils.ToBulkString(streamKey), resp)
+		resp += fmt.Sprintf("*%d\r\n%s%s", 2, utils.ToBulkString(streamKey), respx)
 
-		resp = fmt.Sprintf("*%d\r\n%s", streamKeysCount, resp)
 	}
+	resp = fmt.Sprintf("*%d\r\n%s", streamKeysCount, resp)
 	// resp = fmt.Sprintf("*%d\r\n%s", len(storedItems), resp)
 
 	// fmt.Println("resp :: ", resp)
