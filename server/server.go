@@ -129,7 +129,7 @@ func (s *RedisServer) HandleConnection(c net.Conn) {
 					Name: command,
 					Args: args,
 				})
-				c.Write([]byte(utils.ToSimpleString("QUEUED", "")))
+				c.Write([]byte(utils.ToSimpleString("QUEUED", "OK")))
 			} else {
 				// Normal command
 				handler, err := s.ProcessCommand(command)
