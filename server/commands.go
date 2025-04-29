@@ -12,50 +12,90 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/utils"
 )
 
-func (r *RedisServer) ProcessCommand(c string) (func(net.Conn, []string) error, error) {
+// func (r *RedisServer) ProcessCommand(c string) (func(...interface{}) (string, error), error) {
+func (r *RedisServer) ProcessCommand(c string) (CommandHandler, error) {
 
 	fmt.Println(r.Role, " => strings.ToLower(c) :: ", strings.ToLower(c))
 	switch strings.ToLower(c) {
 	case "ping":
-		return r.ping, nil
+		return argHandlerWrapper{r.ping}, nil
 	case "echo":
-		return r.echo, nil
+		return argHandlerWrapper{r.echo}, nil
 	case "set":
-		return r.set, nil
+		return argHandlerWrapper{r.set}, nil
 	case "get":
-		return r.get, nil
+		return argHandlerWrapper{r.get}, nil
 	case "config":
-		return r.config, nil
+		return argHandlerWrapper{r.config}, nil
 	case "keys":
-		return r.keys, nil
+		return argHandlerWrapper{r.keys}, nil
 	case "info":
-		return r.info, nil
+		return argHandlerWrapper{r.info}, nil
 	// handshake commands
 	case "replconf":
-		return r.replconf, nil
+		return argHandlerWrapper{r.replconf}, nil
 	case "psync":
-		return r.psync, nil
+		return multiHandlerWrapper{r.psync}, nil
 	case "wait":
-		return r.wait, nil
+		return argHandlerWrapper{r.wait}, nil
 	case "type":
-		return r.vtype, nil
+		return argHandlerWrapper{r.vtype}, nil
 	case "xadd":
-		return r.xadd, nil
+		return argHandlerWrapper{r.xadd}, nil
 	case "xrange":
-		return r.xrange, nil
+		return argHandlerWrapper{r.xrange}, nil
 	case "xread":
-		return r.xread, nil
+		return argHandlerWrapper{r.xread}, nil
 	case "incr":
-		return r.incr, nil
+		return argHandlerWrapper{r.incr}, nil
+	case "multi":
+		return multiHandlerWrapper{r.multi}, nil
 	default:
 		utils.LogEntry("crossed", "Default case triggered :: ", c)
 		return nil, fmt.Errorf("not yet implemented")
 	}
 }
 
-func (r *RedisServer) incr(c net.Conn, args []string) error {
+func (r *RedisServer) multi(conn net.Conn, args []string) (string, error) {
+	// var CommandTransactions = make(map[string][]string)
+
+	// // wait until EXEC is recieved
+	// for {
+	// 	var data = make([]byte, 1024)
+	// 	_, err := conn.Read(data)
+
+	// 	if err != nil {
+	// 		fmt.Println(r.Role, " => Error handling requests : ", err.Error())
+	// 		return "", err
+	// 	}
+
+	// 	command, args, err := utils.ParseResp(data)
+
+	// 	if strings.ToLower(command) == "exec" {
+	// 		break
+	// 	}
+
+	// 	if err != nil {
+	// 		return "", err
+	// 	}
+	// 	CommandTransactions[command] = args
+
+	// }
+
+	// for command, cargs := range CommandTransactions {
+	// 	handler, err := r.ProcessCommand(command)
+	// 	if err != nil {
+	// 		return "", err
+	// 	}
+	// 	handler.Execute(cargs)
+	// }
+
+	return utils.ToSimpleString("OK", "OK"), nil
+}
+
+func (r *RedisServer) incr(args []string) (string, error) {
 	if len(args) == 0 {
-		return fmt.Errorf("GET requires an argument")
+		return "", fmt.Errorf("GET requires an argument")
 	}
 	fmt.Println(r.Role, " => store:  ", SessionStore.Data)
 	response, ok := SessionStore.Data[args[0]]
@@ -66,7 +106,7 @@ func (r *RedisServer) incr(c net.Conn, args []string) error {
 	if ok {
 
 		if response.Type != "integer" {
-			return fmt.Errorf("ERR value is not an integer or out of range")
+			return "", fmt.Errorf("ERR value is not an integer or out of range")
 		}
 		value, _ = strconv.Atoi(response.Data.(string))
 		value++
@@ -75,9 +115,7 @@ func (r *RedisServer) incr(c net.Conn, args []string) error {
 	SessionStore.Data[args[0]] = Item{Data: fmt.Sprintf("%d", value), Type: "integer"}
 
 	resp := utils.ToInteger(value)
-	_, err := c.Write([]byte(resp))
-
-	return err
+	return resp, nil
 
 }
 
@@ -128,11 +166,11 @@ func findMaxID(data []map[string]string) string {
 
 var ZeroBlockChan = make(chan map[string]bool)
 
-func (r *RedisServer) xread(c net.Conn, args []string) error {
+func (r *RedisServer) xread(args []string) (string, error) {
 
 	fmt.Println("args : ", args)
 	if len(args) < 3 {
-		return fmt.Errorf("ERR arguments missing")
+		return "", fmt.Errorf("ERR arguments missing")
 	}
 
 	var streamParams map[string]string
@@ -143,7 +181,7 @@ func (r *RedisServer) xread(c net.Conn, args []string) error {
 		streamParams, err = deduceStreamParams(args[1:]...)
 
 		if err != nil {
-			return err
+			return "", err
 		}
 	}
 
@@ -154,16 +192,16 @@ func (r *RedisServer) xread(c net.Conn, args []string) error {
 		blockUnitil := args[1]
 		blockUnitilInt, err = strconv.Atoi(blockUnitil)
 		if err != nil {
-			return fmt.Errorf("ERR block time wrong")
+			return "", fmt.Errorf("ERR block time wrong")
 		}
 
 		if strings.ToLower(args[2]) != "streams" {
-			return fmt.Errorf("ERR wrong type ecpected streams option")
+			return "", fmt.Errorf("ERR wrong type ecpected streams option")
 		}
 		streamParams, err = deduceStreamParams(args[3:]...)
 
 		if err != nil {
-			return err
+			return "", err
 		}
 
 	}
@@ -174,7 +212,7 @@ func (r *RedisServer) xread(c net.Conn, args []string) error {
 		storedData := SessionStore.Data[streamKey]
 		SessionStore.Unlock()
 		if storedData.Type != "stream" {
-			return fmt.Errorf("ERR item is not stream type")
+			return "", fmt.Errorf("ERR item is not stream type")
 		}
 
 		storedItems := storedData.Data.([]map[string]string)
@@ -182,12 +220,10 @@ func (r *RedisServer) xread(c net.Conn, args []string) error {
 		if itemKey == "$" {
 			ik := findMaxID(storedItems)
 			streamParams[streamKey] = ik
-			fmt.Println("[DEBUG] ----------------------- NEW KEy is :: ", itemKey)
 		}
 
 	}
 
-	fmt.Println("[DEBUG] Paused until :: ", blockUnitilInt)
 	// handle indefinite block
 
 	if blockUnitilInt > 0 {
@@ -206,7 +242,6 @@ func (r *RedisServer) xread(c net.Conn, args []string) error {
 
 					storedItems := storedData.Data.([]map[string]string)
 
-					fmt.Println("storedItems :: ", storedItems)
 					for _, item := range storedItems {
 
 						itemParts := strings.Split(item["id"], "-")
@@ -237,7 +272,6 @@ func (r *RedisServer) xread(c net.Conn, args []string) error {
 	streamKeysCount := 0
 	resp := ""
 
-	fmt.Println("streamParams :: ", streamParams)
 	for streamKey, itemKey := range streamParams {
 		// streamKey := args[1]
 		streamKeysCount++
@@ -247,7 +281,7 @@ func (r *RedisServer) xread(c net.Conn, args []string) error {
 		storedData := SessionStore.Data[streamKey]
 		SessionStore.Unlock()
 		if storedData.Type != "stream" {
-			return fmt.Errorf("ERR item is not stream type")
+			return "", fmt.Errorf("ERR item is not stream type")
 		}
 
 		storedItems := storedData.Data.([]map[string]string)
@@ -323,16 +357,14 @@ func (r *RedisServer) xread(c net.Conn, args []string) error {
 		resp = "$-1\r\n"
 	}
 
-	c.Write([]byte(resp))
-
-	return nil
+	return resp, nil
 }
 
-func (r *RedisServer) xrange(c net.Conn, args []string) error {
+func (r *RedisServer) xrange(args []string) (string, error) {
 
 	fmt.Println("args : ", args)
 	if len(args) < 3 {
-		return fmt.Errorf("ERR arguments missing")
+		return "", fmt.Errorf("ERR arguments missing")
 	}
 
 	key := args[0]
@@ -341,7 +373,7 @@ func (r *RedisServer) xrange(c net.Conn, args []string) error {
 	storedData := SessionStore.Data[key]
 
 	if storedData.Type != "stream" {
-		return fmt.Errorf("ERR item is not stream type")
+		return "", fmt.Errorf("ERR item is not stream type")
 	}
 
 	if startS == "-" {
@@ -351,7 +383,7 @@ func (r *RedisServer) xrange(c net.Conn, args []string) error {
 		endS = fmt.Sprintf("%s-9999", startS)
 	}
 	if startS[0] != endS[0] {
-		return fmt.Errorf("ERR range not correct")
+		return "", fmt.Errorf("ERR range not correct")
 	}
 
 	fmt.Println("startS :: ", startS)
@@ -361,27 +393,27 @@ func (r *RedisServer) xrange(c net.Conn, args []string) error {
 
 	start, err := strconv.Atoi(startParts[len(startParts)-1])
 	if err != nil {
-		return fmt.Errorf("ERR startS sequence not correct")
+		return "", fmt.Errorf("ERR startS sequence not correct")
 	}
 	endParts := strings.Split(endS, "-")
 	end, err := strconv.Atoi(endParts[len(endParts)-1])
 
 	if err != nil {
-		return fmt.Errorf("ERR endS sequence not correct")
+		return "", fmt.Errorf("ERR endS sequence not correct")
 	}
 
 	// start, err := strconv.Atoi(startS)
 	// if err != nil {
-	// 	return fmt.Errorf("ERR %s", err.Error())
+	// 	return "", fmt.Errorf("ERR %s", err.Error())
 	// }
 
 	// end, err := strconv.Atoi(endS)
 	// if err != nil {
-	// 	return fmt.Errorf("ERR %s", err.Error())
+	// 	return "", fmt.Errorf("ERR %s", err.Error())
 	// }
 
 	if end < start {
-		return fmt.Errorf("ERR incorrect range supplied")
+		return "", fmt.Errorf("ERR incorrect range supplied")
 	}
 
 	resp := ""
@@ -421,17 +453,16 @@ func (r *RedisServer) xrange(c net.Conn, args []string) error {
 	// fmt.Println("resp :: ", resp)
 	fmt.Println("resp :: ", strings.ReplaceAll(resp, "\r\n", "\\r\\n"))
 
-	c.Write([]byte(resp))
+	return resp, nil
 
-	return nil
 }
 
 var xadd_previous_parsed_id = ""
 
-func (r *RedisServer) xadd(c net.Conn, args []string) error {
+func (r *RedisServer) xadd(args []string) (string, error) {
 
 	if len(args) < 4 {
-		return fmt.Errorf("ERR arguments missing")
+		return "", fmt.Errorf("ERR arguments missing")
 	}
 
 	streamKey := args[0]
@@ -443,7 +474,7 @@ func (r *RedisServer) xadd(c net.Conn, args []string) error {
 	item, exists := SessionStore.Data[streamKey]
 
 	if exists && item.Type != "stream" {
-		return fmt.Errorf("ERR WRONGTYPE Operation against a key holding the wrong kind of value")
+		return "", fmt.Errorf("ERR WRONGTYPE Operation against a key holding the wrong kind of value")
 	}
 
 	maxSeqId := 0
@@ -455,7 +486,7 @@ func (r *RedisServer) xadd(c net.Conn, args []string) error {
 	baseInt, err := strconv.Atoi(base)
 	if err != nil {
 		baseInt = 0
-		// return fmt.Errorf("ERR invalid base number")
+		// return "", fmt.Errorf("ERR invalid base number")
 	}
 
 	intermediateData, ok := item.Data.([]map[string]string)
@@ -466,13 +497,13 @@ func (r *RedisServer) xadd(c net.Conn, args []string) error {
 
 			prevParts := strings.Split(prevID, "-")
 			if len(prevParts) != 2 {
-				return fmt.Errorf("ERR invalid stream id format")
+				return "", fmt.Errorf("ERR invalid stream id format")
 			}
 
 			prevBase := prevParts[0]
 			prevBaseInt, err := strconv.Atoi(prevBase)
 			if err != nil {
-				return fmt.Errorf("ERR invalid base number")
+				return "", fmt.Errorf("ERR invalid base number")
 			}
 
 			if prevBaseInt != baseInt {
@@ -484,7 +515,7 @@ func (r *RedisServer) xadd(c net.Conn, args []string) error {
 			prevSeqInt, err := strconv.Atoi(prevSeq)
 
 			if err != nil {
-				return fmt.Errorf("ERR invalid sequence number")
+				return "", fmt.Errorf("ERR invalid sequence number")
 			}
 
 			if maxSeqId <= prevSeqInt {
@@ -522,14 +553,14 @@ func (r *RedisServer) xadd(c net.Conn, args []string) error {
 		for _, i := range intermediateData {
 			if streamID == i["id"] {
 				// if xadd_previous_parsed_id == streamID {
-				return fmt.Errorf("ERR The ID specified in XADD is equal or smaller than the target stream top item")
+				return "", fmt.Errorf("ERR The ID specified in XADD is equal or smaller than the target stream top item")
 			}
 		}
 
 		// Parse previous ID
 		prevParts := strings.Split(xadd_previous_parsed_id, "-")
 		if len(prevParts) != 2 {
-			return fmt.Errorf("ERR invalid previous ID format")
+			return "", fmt.Errorf("ERR invalid previous ID format")
 		}
 		prevMs := prevParts[0]
 		prevSeq := prevParts[1]
@@ -537,14 +568,14 @@ func (r *RedisServer) xadd(c net.Conn, args []string) error {
 		// Parse current incoming ID
 		currParts := strings.Split(streamID, "-")
 		if len(currParts) != 2 {
-			return fmt.Errorf("ERR invalid current ID format")
+			return "", fmt.Errorf("ERR invalid current ID format")
 		}
 		currMs := currParts[0]
 		currSeq := currParts[1]
 
 		// Check against 0-0
 		if currMs == "0" && currSeq == "0" {
-			return fmt.Errorf("ERR The ID specified in XADD must be greater than 0-0")
+			return "", fmt.Errorf("ERR The ID specified in XADD must be greater than 0-0")
 		}
 
 		prevMsInt, _ := strconv.Atoi(prevMs)
@@ -554,7 +585,7 @@ func (r *RedisServer) xadd(c net.Conn, args []string) error {
 		currSeqInt, _ := strconv.Atoi(currSeq)
 		// Check if smaller or equal to previous
 		if currMsInt < prevMsInt || (currMsInt == prevMsInt && currSeqInt <= prevSeqInt) {
-			return fmt.Errorf("ERR The ID specified in XADD is equal or smaller than the target stream top item")
+			return "", fmt.Errorf("ERR The ID specified in XADD is equal or smaller than the target stream top item")
 		}
 	}
 
@@ -581,22 +612,21 @@ func (r *RedisServer) xadd(c net.Conn, args []string) error {
 	resp = utils.ToBulkString(streamID)
 
 	xadd_previous_parsed_id = streamID
-	c.Write([]byte(resp))
+	return resp, nil
 
-	return nil
 }
 
-// func (r *RedisServer) wait(c net.Conn, args []string) error {
+// func (r *RedisServer) wait(args []string) (string, error) {
 // 	connectedReplicas := len(r.replicas)
 // 	resp := utils.ToInteger(connectedReplicas)
 
-// 	c.Write([]byte(resp))
+// 	return resp, nil
 // 	return nil
 // }
 
-func (s *RedisServer) wait(conn net.Conn, args []string) error {
+func (s *RedisServer) wait(args []string) (string, error) {
 	if len(args) != 2 {
-		return fmt.Errorf("ERR wrong number of arguments for 'WAIT' command")
+		return "", fmt.Errorf("ERR wrong number of arguments for 'WAIT' command")
 	}
 	connected_replicas := s.replicas
 
@@ -604,12 +634,12 @@ func (s *RedisServer) wait(conn net.Conn, args []string) error {
 	// Parse arguments
 	xReplicas, err := strconv.Atoi(args[0])
 	if err != nil || xReplicas < 0 {
-		return fmt.Errorf("ERR invalid number of replicas")
+		return "", fmt.Errorf("ERR invalid number of replicas")
 	}
 
 	timeout, err := strconv.Atoi(args[1])
 	if err != nil || timeout < 0 {
-		return fmt.Errorf("ERR invalid timeout")
+		return "", fmt.Errorf("ERR invalid timeout")
 	}
 
 	fmt.Println("[DEBUG] s.PendingWrites :: ", s.PendingWrites)
@@ -637,14 +667,12 @@ func (s *RedisServer) wait(conn net.Conn, args []string) error {
 	}
 
 	// Send the number of replicas that acknowledged
-	conn.Write([]byte(utils.ToInteger(acknowledged)))
-	fmt.Println("Written acknowledge")
-	return nil
+	return utils.ToInteger(acknowledged), nil
 }
 
-func (r *RedisServer) replconf(c net.Conn, args []string) error {
+func (r *RedisServer) replconf(args []string) (string, error) {
 	if len(args) < 2 {
-		return fmt.Errorf("ERR wrong number of arguments for REPLCONF")
+		return "", fmt.Errorf("ERR wrong number of arguments for REPLCONF")
 	}
 	fmt.Println("replconf args :: ", args, r.Role)
 	// default response
@@ -654,13 +682,13 @@ func (r *RedisServer) replconf(c net.Conn, args []string) error {
 	case "listening-port":
 		port, err := strconv.Atoi(args[1])
 		if err != nil || port < 0 || port > 65535 {
-			return fmt.Errorf("ERR invalid port number")
+			return "", fmt.Errorf("ERR invalid port number")
 		}
 
 	case "capa":
 
 		if strings.ToLower(args[1]) != "eof" && strings.ToLower(args[1]) != "psync2" {
-			return fmt.Errorf("ERR invalid value for capa")
+			return "", fmt.Errorf("ERR invalid value for capa")
 		}
 
 	case "getack":
@@ -672,52 +700,44 @@ func (r *RedisServer) replconf(c net.Conn, args []string) error {
 
 	default:
 		// return nil
-		return fmt.Errorf("ERR unknown REPLCONF parameter: %s", args[0])
+		return "", fmt.Errorf("ERR unknown REPLCONF parameter: %s", args[0])
 	}
 
-	fmt.Println("Sending : ", resp)
-	_, err := c.Write([]byte(resp))
-	return err
+	return resp, nil
 }
 
-func (r *RedisServer) psync(c net.Conn, args []string) error {
+func (r *RedisServer) psync(c net.Conn, args []string) (string, error) {
 	if len(args) != 2 {
-		return fmt.Errorf("ERR wrong number of arguments for PSYNC")
+		return "", fmt.Errorf("ERR wrong number of arguments for PSYNC")
 	}
 
 	// Validate replication ID ("?" or actual ID)
 	if args[0] != "?" && args[0] != r.MasterReplicationID {
-		return fmt.Errorf("ERR invalid MasterReplicationID")
+		return "", fmt.Errorf("ERR invalid MasterReplicationID")
 	}
-
+	resp := ""
 	// Send FULLRESYNC response
-	resp := utils.ToSimpleString(fmt.Sprintf("FULLRESYNC %s 0", r.MasterReplicationID), "OK")
-	_, err := c.Write([]byte(resp))
-
-	if err != nil {
-		return err
-	}
+	resp = utils.ToSimpleString(fmt.Sprintf("FULLRESYNC %s 0", r.MasterReplicationID), "OK")
 
 	// send rdb file contents
 	content, err := os.ReadFile("empty.rdb")
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	resp = fmt.Sprintf("$%d\r\n%s", len(content), content)
-	c.Write([]byte(resp))
 
 	r.Lock()
 	r.replicas = append(r.replicas, c)
 	r.Unlock()
 
-	return err
+	return resp, err
 }
 
-func (r *RedisServer) info(c net.Conn, args []string) error {
+func (r *RedisServer) info(args []string) (string, error) {
 
 	if len(args) != 0 && strings.ToLower(args[0]) != "replication" {
-		return fmt.Errorf("wrong argument : %s", args[0])
+		return "", fmt.Errorf("wrong argument : %s", args[0])
 	}
 	role := fmt.Sprintf("role:%s", r.Role)
 	master_replid := fmt.Sprintf("master_replid:%s", r.MasterReplicationID)
@@ -725,13 +745,12 @@ func (r *RedisServer) info(c net.Conn, args []string) error {
 
 	resp := utils.ToBulkString(fmt.Sprintf("%s\n%s\n%s\n", role, master_replid, master_repl_offset))
 	// resp := utils.ToBulkString(role, master_replid, master_repl_offset)
-	c.Write([]byte(resp))
-	return nil
+	return resp, nil
 }
 
-func (r *RedisServer) config(c net.Conn, args []string) error {
+func (r *RedisServer) config(args []string) (string, error) {
 	if len(args) != 2 || strings.ToLower(args[0]) != "get" {
-		return fmt.Errorf("ERR not yet supported")
+		return "", fmt.Errorf("ERR not yet supported")
 	}
 
 	var resp string
@@ -745,32 +764,28 @@ func (r *RedisServer) config(c net.Conn, args []string) error {
 		resp = utils.ToArrayBulkString([]string{"dbFileName", dbFileName}...)
 	}
 
-	_, err := c.Write([]byte(resp))
+	return resp, nil
 
-	return err
 }
 
-func (r *RedisServer) ping(c net.Conn, args []string) error {
-	c.Write([]byte("+PONG\r\n"))
-	return nil
+func (r *RedisServer) ping(args []string) (string, error) {
+	return "+PONG\r\n", nil
 }
 
-func (r *RedisServer) echo(c net.Conn, args []string) error {
+func (r *RedisServer) echo(args []string) (string, error) {
 	if len(args) == 0 {
-		return fmt.Errorf("ECHO requires an argument")
+		return "", fmt.Errorf("ECHO requires an argument")
 	}
 
 	response := strings.Join(args, " ")
 	resp := utils.ToSimpleString(response, "OK")
-	c.Write([]byte(resp))
-
-	return nil
+	return resp, nil
 }
 
-func (r *RedisServer) set(c net.Conn, args []string) error {
+func (r *RedisServer) set(args []string) (string, error) {
 
 	if len(args) < 2 {
-		return fmt.Errorf("syntax error")
+		return "", fmt.Errorf("syntax error")
 	}
 
 	key := args[0]
@@ -785,13 +800,13 @@ func (r *RedisServer) set(c net.Conn, args []string) error {
 	// Handle PX (expiry in milliseconds)
 	if len(args) > 2 {
 		if len(args) != 4 || strings.ToLower(args[2]) != "px" {
-			return fmt.Errorf("syntax error")
+			return "", fmt.Errorf("syntax error")
 		}
 
 		expiry, err := strconv.Atoi(args[3])
 		fmt.Println("expiry :: ", expiry)
 		if err != nil || expiry < 0 {
-			return fmt.Errorf("invalid PX value")
+			return "", fmt.Errorf("invalid PX value")
 		} else {
 
 			// Launch expiration goroutine
@@ -811,7 +826,7 @@ func (r *RedisServer) set(c net.Conn, args []string) error {
 	}
 
 	if r.Role == "master" {
-		c.Write([]byte(utils.ToSimpleString("OK", "OK")))
+		return utils.ToSimpleString("OK", "OK"), nil
 
 		fmt.Println("Command added to buffer :: ", "SET", args)
 		// Add command to replication buffer
@@ -820,29 +835,27 @@ func (r *RedisServer) set(c net.Conn, args []string) error {
 
 	}
 
-	return nil
+	return "", nil
 }
 
-func (r *RedisServer) get(c net.Conn, args []string) error {
+func (r *RedisServer) get(args []string) (string, error) {
 	if len(args) == 0 {
-		return fmt.Errorf("GET requires an argument")
+		return "", fmt.Errorf("GET requires an argument")
 	}
-	fmt.Println(r.Role, " => store:  ", SessionStore.Data)
+
 	response, ok := SessionStore.Data[args[0]]
 	expiry, exists := ExpKeys[args[0]]
 	if ok && (!exists || time.Now().Compare(expiry) < 0) {
 		resp := utils.ToBulkString(response.Data.(string))
-		c.Write([]byte(resp))
+		return resp, nil
 	} else {
-		c.Write([]byte("$-1\r\n"))
+		return "$-1\r\n", nil
 	}
-
-	return nil
 }
 
-func (r *RedisServer) vtype(c net.Conn, args []string) error {
+func (r *RedisServer) vtype(args []string) (string, error) {
 	if len(args) == 0 {
-		return fmt.Errorf("TYPE requires an argument")
+		return "", fmt.Errorf("TYPE requires an argument")
 	}
 	t := "none"
 	fmt.Println(r.Role, " => store:  ", SessionStore.Data)
@@ -853,15 +866,14 @@ func (r *RedisServer) vtype(c net.Conn, args []string) error {
 		t = response.Type
 
 	}
-	c.Write([]byte(utils.ToSimpleString(t, "OK")))
+	return utils.ToSimpleString(t, "OK"), nil
 
-	return nil
 }
 
-func (r *RedisServer) keys(c net.Conn, args []string) error {
+func (r *RedisServer) keys(args []string) (string, error) {
 
 	if len(args) == 0 {
-		return fmt.Errorf("ERR not yet supported")
+		return "", fmt.Errorf("ERR not yet supported")
 	}
 
 	allKeys := make([]string, 0, len(SessionStore.Data))
@@ -874,11 +886,10 @@ func (r *RedisServer) keys(c net.Conn, args []string) error {
 	} else {
 		filteredKeys, err := utils.MatchPatternKeys(allKeys, args[0])
 		if err != nil {
-			return err
+			return "", err
 		}
 		resp = utils.ToArrayBulkString(filteredKeys...)
 	}
 
-	_, err := c.Write([]byte(resp))
-	return err
+	return resp, nil
 }

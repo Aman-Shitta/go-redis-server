@@ -53,45 +53,100 @@ func (s *RedisServer) Start(port uint) (net.Listener, error) {
 	return l, nil
 }
 
+type QueuedCommand struct {
+	Name string
+	Args []string
+}
+
 func (s *RedisServer) HandleConnection(c net.Conn) {
-	utils.LogEntry("PINK", s.Role, "[+] ------------------Connection started ------------------ [+]")
-	defer func(c net.Conn) {
+	utils.LogEntry("PINK", s.Role, "[+] Connection started [+]")
+	defer func() {
 		c.Close()
-		// fmt.Printf("%s => [-]Connection Closed [-]\n", s.Role)
-		utils.LogEntry("PINK", s.Role, "[+] ------------------Connection closed ------------------ [+]")
-	}(c)
+		utils.LogEntry("PINK", s.Role, "[+] Connection closed [+]")
+	}()
+
+	transactions := make(map[net.Conn][]QueuedCommand)
 
 	for {
 		var data = make([]byte, 1024)
-		_, err := c.Read(data)
-
+		n, err := c.Read(data)
 		if err != nil {
-			fmt.Println(s.Role, " => Error handling requests : ", err.Error())
+			fmt.Println(s.Role, " => Error handling request:", err)
 			return
 		}
 
-		command, args, err := utils.ParseResp(data)
-
+		cmd, args, err := utils.ParseResp(data[:n])
 		if err != nil {
 			c.Write([]byte(fmt.Sprintf("-ERR %s\r\n", err.Error())))
 			continue
 		}
 
-		fn, err := s.ProcessCommand(command)
+		command := strings.ToLower(cmd)
 
-		if err != nil {
-			c.Write([]byte(fmt.Sprintf("-ERR %s\r\n", err.Error())))
-			continue
-		}
+		switch command {
+		case "multi":
+			transactions[c] = []QueuedCommand{}
+			c.Write([]byte(utils.ToSimpleString("OK", "OK")))
 
-		err = fn(c, args)
+		case "exec":
+			queued, exists := transactions[c]
+			if !exists {
+				c.Write([]byte("-ERR EXEC without MULTI\r\n"))
+				continue
+			}
+			delete(transactions, c)
 
-		if err != nil {
-			// c.Write([]byte(fmt.Sprintf("-ERR %s\r\n", err.Error())))
-			response := utils.ToSimpleString(err.Error(), "ERR")
-			c.Write([]byte(response))
+			for _, qc := range queued {
+				handler, err := s.ProcessCommand(qc.Name)
+				if err != nil {
+					c.Write([]byte(fmt.Sprintf("-ERR %s\r\n", err.Error())))
+					continue
+				}
 
-			continue
+				var resp string
+				if qc.Name == "multi" || qc.Name == "psync" {
+					resp, err = handler.Execute(c, qc.Args)
+				} else {
+					resp, err = handler.Execute(qc.Args)
+				}
+
+				if err != nil {
+					c.Write([]byte(utils.ToSimpleString(err.Error(), "ERR")))
+				} else if resp != "" {
+					c.Write([]byte(resp))
+				}
+			}
+			c.Write([]byte(utils.ToSimpleString("OK", "OK")))
+
+		default:
+			if queued, inTx := transactions[c]; inTx {
+				// Inside a transaction, just queue
+				transactions[c] = append(queued, QueuedCommand{
+					Name: command,
+					Args: args,
+				})
+				c.Write([]byte(utils.ToSimpleString("QUEUED", "")))
+			} else {
+				// Normal command
+				handler, err := s.ProcessCommand(command)
+				if err != nil {
+					c.Write([]byte(fmt.Sprintf("-ERR %s\r\n", err.Error())))
+					continue
+				}
+
+				var resp string
+				if command == "multi" || command == "psync" {
+					resp, err = handler.Execute(c, args)
+				} else {
+					resp, err = handler.Execute(args)
+				}
+
+				if err != nil {
+					c.Write([]byte(utils.ToSimpleString(err.Error(), "ERR")))
+				} else if resp != "" {
+					c.Write([]byte(resp))
+				}
+			}
 		}
 	}
 }
@@ -217,13 +272,19 @@ func (s *RedisServer) ProcessPropogatedCommands(rep net.Conn) {
 			continue
 		}
 
-		fn, err := s.ProcessCommand(c)
+		handler, err := s.ProcessCommand(c)
 		if err != nil {
 			fmt.Println("[ERROR] Command processing failed:", err)
 			continue
 		}
 
-		_ = fn(rep, args)
+		// _ = fn(rep, args)
+		if strings.ToLower(c) == "multi" {
+			handler.Execute(rep, args)
+		} else {
+			handler.Execute(args)
+		}
+
 		s.Offset += len(message)
 	}
 }
