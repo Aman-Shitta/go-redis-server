@@ -45,10 +45,40 @@ func (r *RedisServer) ProcessCommand(c string) (func(net.Conn, []string) error, 
 		return r.xrange, nil
 	case "xread":
 		return r.xread, nil
+	case "incr":
+		return r.incr, nil
 	default:
 		utils.LogEntry("crossed", "Default case triggered :: ", c)
 		return nil, fmt.Errorf("not yet implemented")
 	}
+}
+
+func (r *RedisServer) incr(c net.Conn, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("GET requires an argument")
+	}
+	fmt.Println(r.Role, " => store:  ", SessionStore.Data)
+	response, ok := SessionStore.Data[args[0]]
+
+	fmt.Println("response :: ", response)
+	fmt.Println("response ok :: ", ok)
+	value := 1
+	if ok {
+
+		if response.Type != "integer" {
+			return fmt.Errorf("ERR value is not an integer or out of range")
+		}
+		value, _ = strconv.Atoi(response.Data.(string))
+		value++
+	}
+
+	SessionStore.Data[args[0]] = Item{Data: value, Type: "integer"}
+
+	resp := utils.ToInteger(value)
+	_, err := c.Write([]byte(resp))
+
+	return err
+
 }
 
 // helper fuction for XREAD
