@@ -100,6 +100,8 @@ func (s *RedisServer) HandleConnection(c net.Conn) {
 				c.Write([]byte("*0\r\n"))
 				continue
 			}
+			resps := []string{}
+
 			for _, qc := range queued {
 				handler, err := s.ProcessCommand(qc.Name)
 				if err != nil {
@@ -117,10 +119,16 @@ func (s *RedisServer) HandleConnection(c net.Conn) {
 				if err != nil {
 					c.Write([]byte(utils.ToSimpleString(err.Error(), "ERR")))
 				} else if resp != "" {
-					c.Write([]byte(resp))
+
+					// c.Write([]byte(resp))
+					resps = append(resps, resp)
 				}
 			}
-			c.Write([]byte(utils.ToSimpleString("OK", "OK")))
+
+			r := strings.Join(resps, "")
+			r = fmt.Sprintf("*%d\r\n%s", len(resps), r)
+
+			c.Write([]byte(r))
 
 		default:
 			if queued, inTx := transactions[c]; inTx {
