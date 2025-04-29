@@ -70,6 +70,32 @@ func deduceStreamParams(args ...string) (map[string]string, error) {
 
 }
 
+func findMaxID(data []map[string]string) string {
+
+	maxIDBaseInt := 0
+	maxIDSeqInt := 0
+
+	for _, item := range data {
+
+		itemParts := strings.Split(item["id"], "-")
+		itemBase := itemParts[0]
+
+		itemBaseInt, _ := strconv.Atoi(itemBase)
+
+		itemSeq := itemParts[len(itemParts)-1]
+		itemSeqInt, _ := strconv.Atoi(itemSeq)
+
+		if maxIDBaseInt <= itemBaseInt {
+			if maxIDSeqInt <= itemSeqInt {
+				maxIDBaseInt = itemBaseInt
+				maxIDSeqInt = itemSeqInt
+			}
+		}
+	}
+
+	return fmt.Sprintf("%d-%d", maxIDBaseInt, maxIDSeqInt)
+}
+
 var ZeroBlockChan = make(chan map[string]bool)
 
 func (r *RedisServer) xread(c net.Conn, args []string) error {
@@ -91,10 +117,12 @@ func (r *RedisServer) xread(c net.Conn, args []string) error {
 		}
 	}
 
+	blockUnitilInt := -1
+
 	if strings.ToLower(args[0]) == "block" {
 
 		blockUnitil := args[1]
-		blockUnitilInt, err := strconv.Atoi(blockUnitil)
+		blockUnitilInt, err = strconv.Atoi(blockUnitil)
 		if err != nil {
 			return fmt.Errorf("ERR block time wrong")
 		}
@@ -108,51 +136,72 @@ func (r *RedisServer) xread(c net.Conn, args []string) error {
 			return err
 		}
 
-		// handle indefinite block
+	}
 
-		if blockUnitilInt > 0 {
-			time.Sleep(time.Millisecond * time.Duration(blockUnitilInt))
-		} else {
-			// block connection for idefinite time until required key is found
-			func() {
-			outer:
-				for {
-					time.Sleep(time.Millisecond * time.Duration(1000))
+	for streamKey, itemKey := range streamParams {
 
-					for streamKey, itemKey := range streamParams {
-						SessionStore.Lock()
-						storedData := SessionStore.Data[streamKey]
-						SessionStore.Unlock()
+		SessionStore.Lock()
+		storedData := SessionStore.Data[streamKey]
+		SessionStore.Unlock()
+		if storedData.Type != "stream" {
+			return fmt.Errorf("ERR item is not stream type")
+		}
 
-						storedItems := storedData.Data.([]map[string]string)
+		storedItems := storedData.Data.([]map[string]string)
 
-						fmt.Println("storedItems :: ", storedItems)
-						for _, item := range storedItems {
+		if itemKey == "$" {
+			ik := findMaxID(storedItems)
+			streamParams[streamKey] = ik
+			fmt.Println("[DEBUG] ----------------------- NEW KEy is :: ", itemKey)
+		}
 
-							itemParts := strings.Split(item["id"], "-")
+	}
 
-							itemBase := itemParts[0]
-							itemSeq := itemParts[len(itemParts)-1]
+	fmt.Println("[DEBUG] Paused until :: ", blockUnitilInt)
+	// handle indefinite block
 
-							itemBaseInt, _ := strconv.Atoi(itemBase)
-							itemSeqInt, _ := strconv.Atoi(itemSeq)
+	if blockUnitilInt > 0 {
+		time.Sleep(time.Millisecond * time.Duration(blockUnitilInt))
+	} else if blockUnitilInt == 0 {
+		// block connection for idefinite time until required key is found
+		func() {
+		outer:
+			for {
+				time.Sleep(time.Millisecond * time.Duration(1000))
 
-							itemKeyParts := strings.Split(itemKey, "-")
+				for streamKey, itemKey := range streamParams {
+					SessionStore.Lock()
+					storedData := SessionStore.Data[streamKey]
+					SessionStore.Unlock()
 
-							itemKeyBase := itemKeyParts[0]
-							itemKeyBaseInt, _ := strconv.Atoi(itemKeyBase)
+					storedItems := storedData.Data.([]map[string]string)
 
-							itemKeySeq := itemKeyParts[len(itemKeyParts)-1]
-							itemKeySeqInt, _ := strconv.Atoi(itemKeySeq)
+					fmt.Println("storedItems :: ", storedItems)
+					for _, item := range storedItems {
 
-							if itemBaseInt == itemKeyBaseInt && itemKeySeqInt < itemSeqInt {
-								break outer
-							}
+						itemParts := strings.Split(item["id"], "-")
+
+						itemBase := itemParts[0]
+						itemSeq := itemParts[len(itemParts)-1]
+
+						itemBaseInt, _ := strconv.Atoi(itemBase)
+						itemSeqInt, _ := strconv.Atoi(itemSeq)
+
+						itemKeyParts := strings.Split(itemKey, "-")
+
+						itemKeyBase := itemKeyParts[0]
+						itemKeyBaseInt, _ := strconv.Atoi(itemKeyBase)
+
+						itemKeySeq := itemKeyParts[len(itemKeyParts)-1]
+						itemKeySeqInt, _ := strconv.Atoi(itemKeySeq)
+
+						if itemBaseInt == itemKeyBaseInt && itemKeySeqInt < itemSeqInt {
+							break outer
 						}
 					}
 				}
-			}()
-		}
+			}
+		}()
 	}
 
 	streamKeysCount := 0
@@ -172,6 +221,11 @@ func (r *RedisServer) xread(c net.Conn, args []string) error {
 		}
 
 		storedItems := storedData.Data.([]map[string]string)
+
+		// if itemKey == "$" {
+		// 	itemKey = findMaxID(storedItems)
+		// 	fmt.Println("[DEBUG] ----------------------- NEW KEy is :: ", itemKey)
+		// }
 
 		ix := 0
 
